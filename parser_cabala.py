@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
-import json
 import logging
 import logging.config
 import datetime
@@ -22,8 +21,7 @@ from elements_coords_in_img import (game_types,
 
 class ParserChecks:
     def __init__(self, img_path, log_dir="", debug_img_dir=""):
-        # name file
-        self.img_path = img_path
+        self.img_path = img_path  # name file
         self.img_filename = os.path.basename(img_path).split(".")[0].strip()
         # dir for log
         if log_dir:
@@ -32,36 +30,32 @@ class ParserChecks:
             self.log_dir = os.path.join("..", "log", "parser")
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
-        # dir for debug img
-        self.debug_mode = False
-        self.debug_mode = True
-        #
+
+        self.debug_mode = True  # dir for debug img
+
         if debug_img_dir:
             self.debug_img_dir = os.path.join(log_dir, "parser", "debug_img", self.img_filename)
         else:
             self.debug_img_dir = os.path.join("..", "log", "parser", "debug_img", self.img_filename)
         if not os.path.exists(self.debug_img_dir):
             os.makedirs(self.debug_img_dir)
-        # num step prog
-        self.StepNum = 0
+
+        self.StepNum = 0  # num step prog
         # TimeStamp
         self.TaskTimeStart = datetime.datetime.now()
         self.StepTimeStart = datetime.datetime.now()
-        # статус каждого шага программы
-        self.StepStatus = "OK"
+        self.StepStatus = "OK"  # статус каждого шага программы
         # лог по каждому шагу программы
         self.StepLog = ""
         self.StepLogAdd = ""
-        # лог по каждому шагу программы полный
-        self.StepLogFull = ""
-        #
+        self.StepLogFull = ""  # лог по каждому шагу программы полный
         self.job_error = False
         self.history_job = {}
         self.job_log_text = ""
         self.gl_name = ""
         self.gl_name_short = ""
-        # flag check img
-        self.img_is_valid = False
+        self.img_is_valid = False  # flag check img
+        self.all_data_not_found = False
         # start log
         self.set_log()
         self.job_log("" + "*" * 40)
@@ -147,7 +141,7 @@ class ParserChecks:
                 "game_type": [000, "top_line"],
             }
         }
-        #
+
         self.qr_code_info = {}
         self.main_data_contours = {
             "game_ids_count": 0,
@@ -312,7 +306,6 @@ class ParserChecks:
         try:
             self.StepLogAdd = f'  file = {self.img_path}'
             self.img_original = cv2.imread(self.img_path)
-            self.img_original = self.resize_img(self.img_original)
             self.img_height, self.img_width = self.img_original.shape[:2]
             self.img_height_centr, self.img_width_centr = int(self.img_height/2), int(self.img_width/2)
             self.StepLogAdd = f'\n  img_height, img_width = {self.img_height}, {self.img_width}'
@@ -329,14 +322,10 @@ class ParserChecks:
             # img check
             self.qr_code_read()
             if self.qrcode_found:
-                # check rotate
-                # print("qrcode_point_center_x      = ", self.qrcode_point_centr_x)
-                # print("qrcode_point_center_y      = ", self.qrcode_point_centr_y)
                 if self.img_height > self.img_width:
                     qrcode_position_gv = "vertical"
                     if self.qrcode_point_centr_y > self.img_height_centr:
-                        # если вверх ногами - поворот 180 rotateCode=1 180 градусов по часовой
-                        qrcode_position = "down"
+                        qrcode_position = "down"  # если вверх ногами - поворот 180 rotateCode=1 180 градусов по часовой
                         img_rotate = 1
                     else:
                         qrcode_position = "top"
@@ -344,12 +333,10 @@ class ParserChecks:
                 else:
                     qrcode_position_gv = "gorizont"
                     if self.qrcode_point_centr_x > self.img_width_centr:
-                        # если повернут 90  - поворот 270 rotateCode=2 270 градусов по часовой
-                        qrcode_position = "right"
+                        qrcode_position = "right"  # если повернут 90  - поворот 270 rotateCode=2 270 градусов по часовой
                         img_rotate = 2
                     else:
-                        # если повернут 270 - поворот 90  rotateCode=0 90 градусов по часовой
-                        qrcode_position = "left"
+                        qrcode_position = "left"  # если повернут 270 - поворот 90  rotateCode=0 90 градусов по часовой
                         img_rotate = 0
                 print("qrcode_position_gv = ", qrcode_position_gv)
                 print("qrcode_position    = ", qrcode_position)
@@ -357,7 +344,10 @@ class ParserChecks:
 
                 if img_rotate:
                     self.img_original = cv2.rotate(self.img_original, img_rotate)
-                    self.qr_code_read()
+
+                self.rotate_and_crop_check()
+                self.img_original = self.resize_img(self.img_original)
+                self.qr_code_read()
 
                 self.img_height, self.img_width = self.img_original.shape[:2]
                 self.img_height_centr, self.img_width_centr = int(self.img_height / 2), int(self.img_width / 2)
@@ -384,8 +374,6 @@ class ParserChecks:
                         "middle_line": self.qrcode_point_right_top_x - self.qrcode_point_left_top_x  # value by OX
                     }
                 self.check_info["qr_code_link"] = self.qrcode_data
-                # copy grey
-
 
                 # self.img_grayscale = self.img_original.copy()
                 # self.img_grayscale = cv2.cvtColor(self.img_grayscale, cv2.COLOR_BGR2GRAY)
@@ -407,16 +395,11 @@ class ParserChecks:
                 # self.save_pic_debug(self.wb_blured_img, f"img_wb_blured_02.jpg")
                 # self.wb_blured_img = self._denoise_wb_img(self.wb_blured_img)
 
+
                 # Extract the red channel
-
-                self.rotate_and_crop_check()
-                # self.user_friendly_image = self.img_original.copy()
-
                 red_channel = self.img_original[:, :, 2]  # Red channel index is 2
-
                 # Create a mask where red channel values are greater than 200
                 mask = red_channel > 200
-
                 # Replace pixels where mask is True with white
                 self.img_original[mask] = [255, 255, 255]
 
@@ -431,8 +414,12 @@ class ParserChecks:
                 print("FINISH img_prep")
 
                 self.img_is_valid = True
-
+            else:
+                self.img_is_valid = False
+                self.all_data_not_found = True
         except Exception as ex:
+            self.img_is_valid = False
+            self.all_data_not_found = True
             self.job_log(f'  check_prepare_pict_02 = {ex} ')
             self.StepStatus = ex
 
@@ -455,32 +442,32 @@ class ParserChecks:
         center = (w // 2, h // 2)
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated = cv2.warpAffine(self.img_original, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-        self.img_original = rotated
+
+        # TODO: remove it, make cropping more accurate
+        self.rotated_img = self.img_original = rotated
+
         self.save_pic_debug(rotated, f"rotated_check.jpg")
 
         if abs(angle) > 1:
-            self.qr_code_read()
+            img = cv2.cvtColor(rotated, cv2.COLOR_BGR2HSV)
+            thresh = cv2.inRange(img, (0, 0, 0), (255, 255, 232))
+            thresh = cv2.threshold(thresh, 200, 255, cv2.THRESH_BINARY_INV)[1]
 
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+            morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
 
-            # src_gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
-            # canny_output = cv2.Canny(src_gray, 100, 200)
-            # contours, hierarchy = cv2.findContours(canny_output, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            # contours = [cv2.boundingRect(cnt) for cnt in contours]
-            # contours_areas = [cnt[2]*cnt[3] for cnt in contours]
-            # max_area_index = np.argmax(contours_areas)
-            # print("CHECK AREA: ", contours_areas[max_area_index])
-            # print("X, Y, W, H: ", list(filter(lambda cnt: cnt[2] > 600 and cnt[3] > 1000, contours)))
-            # check_contour = contours[max_area_index]
-            # x, y, w, h = check_contour
+            contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = contours[0] if len(contours) == 2 else contours[1]
+            big_contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(big_contour)
 
             cropped = rotated[
-                0:self.img_height,
-                self.qrcode_point_left_top_x-300:self.qrcode_point_right_top_x+300
+                0:thresh.shape[0],
+                x:x + w
             ]
             self.img_original = cropped
-            self.img_original = self.resize_img(self.img_original)
-            self.img_height, self.img_width = self.img_original.shape[:2]
             self.save_pic_debug(cropped, f"cropped_check.jpg")
+        self.img_height, self.img_width = self.img_original.shape[:2]
 
     @staticmethod
     def _unique_contours(contours, data_type="any_else_data"):
@@ -573,6 +560,14 @@ class ParserChecks:
                 (last_symbol_cnt[0] + 2, last_symbol_cnt[1], last_symbol_cnt[2], last_symbol_cnt[3])
             )
         return updated_contours
+
+    @staticmethod
+    def resize_cropped_img(img, target_width):
+        height, width = img.shape[:2]
+        ratio = target_width / width
+        target_height = int(height * ratio)
+        resized_img = cv2.resize(img, (target_width, target_height))
+        return resized_img
 
     def data_incorrect_parsed_log(self, stringed_error, data_key):
         print(stringed_error)
@@ -674,7 +669,7 @@ class ParserChecks:
                         max_x = x
                 y = sum_y // len(line_points)
 
-                print("MAIN LINES BEFORE WIDTH AND POSITION CHECK:", {"min_x": min_x, "max_x": max_x, "y": y})
+                # print("MAIN LINES BEFORE WIDTH AND POSITION CHECK:", {"min_x": min_x, "max_x": max_x, "y": y})
                 # Remove lines which OY coord in range from 0 to 1200 and from img.height to img.height-500
                 # Because card/table lines not in those diapason
                 # and if x2 - x1 >= threshold
@@ -717,6 +712,7 @@ class ParserChecks:
                         "bottom_line": lines[3]
                     }
         except:
+            self.all_data_not_found = True
             self.data_incorrect_parsed_log("Main content lines were not found, error occurred", "main_content_lines")
             self.StepStatus = "FAIL"
         return self.longest_lines
@@ -881,28 +877,8 @@ class ParserChecks:
 
     def get_dashed_number(self):
         try:
-            decoded_objects = pyzbar.decode(self.img_original, symbols=[pyzbar.ZBarSymbol.I25])
+            decoded_objects = pyzbar.decode(self.rotated_img, symbols=[pyzbar.ZBarSymbol.I25])
             self.check_info["dashed_number"] = decoded_objects[0].data.decode("utf-8")[:-1]  # Read with no needed "0" at the end
-
-            # bottom_line = self.longest_lines["bottom_line"]
-            # dashed_number_contour = self.main_data_contours["dashed_number"]  # (x, y, w, h)
-            # crop_img = self.wb_blured_img[
-            #     bottom_line["y"] + dashed_number_contour[1]:bottom_line["y"] + dashed_number_contour[1] + dashed_number_contour[3],
-            #     dashed_number_contour[0]:dashed_number_contour[0] + dashed_number_contour[2]
-            # ]
-            #
-            # self.save_pic_debug(crop_img, f"dashed_number/dashed_number.jpg")
-            # numbers = self.get_value_from_image(crop_img, "numbers")
-            #
-            # if len(numbers) == 19:
-            #     dashed_number = f"{numbers[:4]}-{numbers[4:13]}-{numbers[13:]}"
-            #     self.check_info["dashed_number"] = dashed_number
-            # else:
-            #     self.data_incorrect_parsed_log(
-            #         f"The length of the number is not correct(dashed_number)\nNumber: {numbers}",
-            #         "dashed_number"
-            #     )
-            #     self.check_info["dashed_number"] = numbers
         except:
             self.data_incorrect_parsed_log(
                 f"The length of the number is not correct, error occurred(dashed_number)",
@@ -1118,7 +1094,7 @@ class ParserChecks:
                         i += 2
         except Exception as ex:
             self.data_incorrect_parsed_log(
-                f"Table was not found, error occurred(get_table_123_777)",
+                f"Table was not found, error occurred(get_table_123_777): {ex}",
                 "table_123_777"
             )
             self.StepStatus = "FAIL"
@@ -1302,7 +1278,8 @@ class ParserChecks:
             numbers = self.get_value_from_image(crop_img, "date")
             if len(numbers) == 12:
                 date = f"{numbers[:2]}:{numbers[2:4]}:{numbers[4:6]} {numbers[6:8]}.{numbers[8:10]}.{numbers[10:]}"
-                self.check_info["date"] = datetime.datetime.strptime(date, "%H:%M:%S %d.%m.%y")
+                datetime.datetime.strptime(date, "%H:%M:%S %d.%m.%y")  # if there is no error then add datetime string
+                self.check_info["date"] = date
             else:
                 self.data_incorrect_parsed_log(f"The length of the number is not correct(date)\nNumber: {numbers}", "date")
                 self.check_info["date"] = numbers
@@ -1354,21 +1331,8 @@ class ParserChecks:
 
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            cropped_img = cv2.copyMakeBorder(
-                cropped_img,
-                top=2,
-                bottom=2,
-                left=2,
-                right=2,
-                borderType=cv2.BORDER_CONSTANT,
-                value=[255, 255, 255]
-            )
             res = cv2.matchTemplate(img, cropped_img, cv2.TM_CCOEFF_NORMED)
             y, x = np.unravel_index(res.argmax(), res.shape)
-            # self.save_pic_debug(
-            #     cropped_img,
-            #     f"table_numbers({self.check_info['game_type']})/table_number({x}, {y}).png"
-            # )
             print(x, y)
             for key, value in d_table_numbers.items():
                 if x in range(*value[0]) and y in range(*value[1]):
@@ -1396,17 +1360,19 @@ class ParserChecks:
 
         elif data_type == "game_type":
             img = cv2.imread("template_images/game_types.png")
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
             res = cv2.matchTemplate(
-                cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
-                cv2.cvtColor(cropped_img, cv2.COLOR_BGR2RGB),
+                img,
+                cropped_img,
                 cv2.TM_CCOEFF_NORMED
             )
             y, x = np.unravel_index(res.argmax(), res.shape)
+            print("GAME TYPE COORDS:", x, y)
             for key, value in game_types.items():
                 if x in range(*value[0]) and y in range(*value[1]):
                     return key
-            return ""
+            return "Not found"
 
         elif data_type == "game_subtype":
             game_type = self.check_info["game_type"]
@@ -1644,11 +1610,7 @@ class ParserChecks:
                     else:
                         img = numbers_img
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    # if data_type == "game_id":
-                    #     print("NUMBER WIDTH AND HEIGHT:", cropped_contour.shape[:2])
-                    symbol_w_bordered = cropped_contour.shape[0]
-                    if symbol_w_bordered > 40:
-                        pass # TODO: resize
+
                     res = cv2.matchTemplate(img, cropped_contour, cv2.TM_CCOEFF_NORMED)
                     found_symbol_y, found_symbol_x = np.unravel_index(res.argmax(), res.shape)
                     for key, value in d_all_symbols.items():
@@ -1673,15 +1635,8 @@ class ParserChecks:
             card_type = data_type.split("_")[1]
             img = cv2.imread(f"template_images/cards_{card_type}.png")
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # cropped_img = cv2.copyMakeBorder(
-            #     cropped_img,
-            #     top=2,
-            #     bottom=2,
-            #     left=1,
-            #     right=1,
-            #     borderType=cv2.BORDER_CONSTANT,
-            #     value=[255, 255, 255]
-            # )
+
+            # TODO: change to staticmethod
             height, width = cropped_img.shape[:2]
             target_width = 127
             ratio = target_width / width
@@ -1772,8 +1727,14 @@ class ParserChecks:
                 self.step_stop("get_table_123_777")
         else:
             print("Image is not valid. Data was not parsed.")
+            self.all_data_not_found = True
 
-        return self.check_info, self.is_incorrect_check_info, self.StepLogFull
+        return self.check_info, self.all_data_not_found, self.is_incorrect_check_info, self.StepLogFull
 
+
+
+# TODO: check 123, 777
+# TODO: change in get_result() from step_start and step_stop to decorator
+# TODO: REFACTOR !!!!
 # TODO: find "autofilling" data near subtype
 # TODO: Type hints ???
