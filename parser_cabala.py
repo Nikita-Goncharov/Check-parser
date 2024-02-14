@@ -19,6 +19,34 @@ from elements_coords_in_img import (game_types,
                                     d_extra_numbers)
 
 
+def step_decorator(l_name_step):
+    """Created just for log status and time of each step of check parser
+
+    """
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            # Attention! When we pass args and kwargs for object method, first arg will be self(object)
+            self = args[0]
+            self.StepTimeStart = datetime.datetime.now()
+            self.StepNum += 1
+            fn(*args, **kwargs)
+            TimeTask = str((datetime.datetime.now() - self.TaskTimeStart))
+            TimeTest = str((datetime.datetime.now() - self.StepTimeStart))
+            if self.StepLogAdd:
+                str_log = f"{self.StepLogAdd}"
+                self.StepLog += str_log + "\n"
+            self.StepLogAdd = ''
+            str_log = f"  {str(self.StepNum).zfill(2)} = {TimeTask} = {TimeTest} = {l_name_step} = {self.StepStatus}"
+            self.StepLog += str_log + "\n"
+            self.job_error = True if self.StepStatus != "OK" else False
+            self.StepStatus = "OK"
+            self.job_log(str_log)
+
+        return wrapper
+
+    return decorator
+
+
 class ParserChecks:
     def __init__(self, img_path, log_dir="", debug_img_dir=""):
         self.img_path = img_path  # name file
@@ -105,6 +133,7 @@ class ParserChecks:
         logging.config.dictConfig(DictLOGGING)
         self.log_parser = logging.getLogger(name_logger)
 
+    @step_decorator("set_param")
     def set_param(self):
         # Distance from lines to needed elements
         self.games_elements_distance = {
@@ -183,22 +212,22 @@ class ParserChecks:
         # if here exists pairs, then that data was parsed incorrect, example: "dashed_number": True
         self.is_incorrect_check_info = {}
 
-    def step_start(self):
-        self.StepTimeStart = datetime.datetime.now()
-        self.StepNum += 1
-
-    def step_stop(self, l_name_step=""):
-        TimeTask = str((datetime.datetime.now() - self.TaskTimeStart))
-        TimeTest = str((datetime.datetime.now() - self.StepTimeStart))
-        if self.StepLogAdd:
-            str_log = f"{self.StepLogAdd}"
-            self.StepLog += str_log + "\n"
-        self.StepLogAdd = ''
-        str_log = f"  {str(self.StepNum).zfill(2)} = {TimeTask} = {TimeTest} = {l_name_step} = {self.StepStatus}"
-        self.StepLog += str_log + "\n"
-        self.job_error = True if self.StepStatus != "OK" else False
-        self.StepStatus = "OK"
-        self.job_log(str_log)
+    # def step_start(self):
+    #     self.StepTimeStart = datetime.datetime.now()
+    #     self.StepNum += 1
+    #
+    # def step_stop(self, l_name_step=""):
+    #     TimeTask = str((datetime.datetime.now() - self.TaskTimeStart))
+    #     TimeTest = str((datetime.datetime.now() - self.StepTimeStart))
+    #     if self.StepLogAdd:
+    #         str_log = f"{self.StepLogAdd}"
+    #         self.StepLog += str_log + "\n"
+    #     self.StepLogAdd = ''
+    #     str_log = f"  {str(self.StepNum).zfill(2)} = {TimeTask} = {TimeTest} = {l_name_step} = {self.StepStatus}"
+    #     self.StepLog += str_log + "\n"
+    #     self.job_error = True if self.StepStatus != "OK" else False
+    #     self.StepStatus = "OK"
+    #     self.job_log(str_log)
 
     def job_log(self, l_text=""):
         self.log_parser.info(l_text)
@@ -302,6 +331,7 @@ class ParserChecks:
         resized_image = cv2.resize(img, (target_width, target_height))
         return resized_image
 
+    @step_decorator("img_prep")
     def img_prep(self):
         try:
             self.StepLogAdd = f'  file = {self.img_path}'
@@ -574,37 +604,7 @@ class ParserChecks:
         self.job_log(stringed_error)
         self.is_incorrect_check_info.update({data_key: True})
 
-    def get_game_type(self):
-        try:
-            game_type_img = self.wb_blured_img[
-                self.qr_code_info["bottom_left"][1] + 310:self.qr_code_info["bottom_left"][1] + 310 + 300,
-                self.qr_code_info["top_left"][0] - 158:self.qr_code_info["top_right"][0] + 158
-            ]
-            edges = cv2.Canny(game_type_img, 10, 200)
-            contours, hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # Contours to list of tuples
-            info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
-            # Sort contours in right way
-            sorted_contours = sorted(info_of_contours, key=lambda contour: contour[0])
-            # Remove garbage contours
-            sorted_contours = [contour for contour in sorted_contours if
-                               contour[2] >= 30 and contour[3] >= 70]
-            unique_contours = self._unique_contours(sorted_contours)
-            first_contour = unique_contours[0]
-            last_contour = unique_contours[-1]
-            exactly_game_type_img = game_type_img[
-                last_contour[1]: first_contour[1] + first_contour[3],
-                first_contour[0]:last_contour[0] + last_contour[2]
-            ]
-            self.save_pic_debug(exactly_game_type_img, f"game_type/game_type.jpg")
-            self.check_info["game_type"] = self.get_value_from_image(exactly_game_type_img, "game_type")
-            if self.check_info["game_type"] == "":
-                self.data_incorrect_parsed_log(f"Check game type is not found(get_game_type)", "game_type")
-        except:
-            self.data_incorrect_parsed_log(f"Check game type is not found, error occurred(get_game_type)", "game_type")
-            self.StepStatus = "FAIL"
-        return self.check_info["game_type"]
-
+    @step_decorator("get_coords_of_main_lines")
     def get_coords_of_main_lines(self):
         try:
             blured_img_lines = cv2.GaussianBlur(self.wb_blured_img, [5, 5], 0)  # self.img_grayscale
@@ -717,6 +717,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.longest_lines
 
+    @step_decorator("get_main_data_contours")
     def get_main_data_contours(self):
         try:
             def split_contours_by_width(contours):
@@ -813,6 +814,39 @@ class ParserChecks:
         except:
             self.StepStatus = "FAIL"
 
+    @step_decorator("get_game_type")
+    def get_game_type(self):
+        try:
+            game_type_img = self.wb_blured_img[
+                self.qr_code_info["bottom_left"][1] + 310:self.qr_code_info["bottom_left"][1] + 310 + 300,
+                self.qr_code_info["top_left"][0] - 158:self.qr_code_info["top_right"][0] + 158
+            ]
+            edges = cv2.Canny(game_type_img, 10, 200)
+            contours, hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # Contours to list of tuples
+            info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
+            # Sort contours in right way
+            sorted_contours = sorted(info_of_contours, key=lambda contour: contour[0])
+            # Remove garbage contours
+            sorted_contours = [contour for contour in sorted_contours if
+                               contour[2] >= 30 and contour[3] >= 70]
+            unique_contours = self._unique_contours(sorted_contours)
+            first_contour = unique_contours[0]
+            last_contour = unique_contours[-1]
+            exactly_game_type_img = game_type_img[
+                last_contour[1]: first_contour[1] + first_contour[3],
+                first_contour[0]:last_contour[0] + last_contour[2]
+            ]
+            self.save_pic_debug(exactly_game_type_img, f"game_type/game_type.jpg")
+            self.check_info["game_type"] = self.get_value_from_image(exactly_game_type_img, "game_type")
+            if self.check_info["game_type"] == "":
+                self.data_incorrect_parsed_log(f"Check game type is not found(get_game_type)", "game_type")
+        except:
+            self.data_incorrect_parsed_log(f"Check game type is not found, error occurred(get_game_type)", "game_type")
+            self.StepStatus = "FAIL"
+        return self.check_info["game_type"]
+
+    @step_decorator("get_game_subtype")
     def get_game_subtype(self):
         try:
             img = cv2.imread("template_images/no_needed_repeat_game.png")
@@ -848,6 +882,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["game_subtype"]
 
+    @step_decorator("get_spent_money")
     def get_spent_money(self):
         try:
             bottom_line = self.longest_lines["bottom_line"]
@@ -875,6 +910,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["spent_on_ticket"]
 
+    @step_decorator("get_dashed_number")
     def get_dashed_number(self):
         try:
             decoded_objects = pyzbar.decode(self.rotated_img, symbols=[pyzbar.ZBarSymbol.I25])
@@ -887,6 +923,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["dashed_number"]
 
+    @step_decorator("get_spaced_number")
     def get_spaced_number(self):
         try:
             bottom_line = self.longest_lines["bottom_line"]
@@ -914,6 +951,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["spaced_number"]
 
+    @step_decorator("get_cards")
     def get_cards(self):
         try:
             top_line = self.longest_lines["top_line"]
@@ -978,6 +1016,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["cards"]
 
+    @step_decorator("get_table_123_777")
     def get_table_123_777(self):
         try:
             game_type = self.check_info["game_type"]
@@ -1100,6 +1139,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["table"]
 
+    @step_decorator("get_table_lotto")
     def get_table_lotto(self):
         try:
             if self.bottom_oy_border_for_table == 0:
@@ -1214,6 +1254,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["table"]
 
+    @step_decorator("get_extra")
     def get_extra(self):
         try:
             middle_line = self.longest_lines["middle_line"]
@@ -1265,6 +1306,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["extra"], self.check_info["extra_number"]
 
+    @step_decorator("get_date")
     def get_date(self):
         try:
             bottom_line = self.longest_lines["bottom_line"]
@@ -1288,6 +1330,7 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["date"]
 
+    @step_decorator("get_game_id")
     def get_game_id(self):
         try:
             bottom_line = self.longest_lines["bottom_line"]
@@ -1662,69 +1705,33 @@ class ParserChecks:
 
     def get_result(self):
         # All should be called in this way
-        self.step_start()
         self.set_param()
-        self.step_stop("set_param")
 
-        self.step_start()
         self.img_prep()
-        self.step_stop("img_prep")
 
         if self.img_is_valid:
             print("Image is valid.")
-            self.step_start()
             self.get_coords_of_main_lines()
-            self.step_stop("get_coords_of_main_lines")
             self.job_log(f"Main check lines: {self.longest_lines}")
 
-            self.step_start()
-            self.get_game_type()
-            self.step_stop("get_game_type")
-            game_type = self.check_info["game_type"]
+            game_type = self.get_game_type()
+            # game_type = self.check_info["game_type"]
 
-            self.step_start()
             self.get_game_subtype()
-            self.step_stop("get_game_subtype")
-
-            self.step_start()
             self.get_main_data_contours()
-            self.step_stop("get_main_data_contours")
-
-            self.step_start()
             self.get_game_id()
-            self.step_stop("get_game_id")
-
-            self.step_start()
             self.get_date()
-            self.step_stop("get_date")
-
-            self.step_start()
             self.get_spent_money()
-            self.step_stop("get_spent_money")
-
-            self.step_start()
             self.get_dashed_number()
-            self.step_stop("get_dashed_number")
-
-            self.step_start()
             self.get_spaced_number()
-            self.step_stop("get_spaced_number")
 
             if game_type == "chance":
-                self.step_start()
                 self.get_cards()
-                self.step_stop("get_cards")
             elif game_type == "lotto":
-                self.step_start()
                 self.get_table_lotto()
-                self.step_stop("get_table_lotto")
-                self.step_start()
                 self.get_extra()
-                self.step_stop("get_extra")
             else:
-                self.step_start()
                 self.get_table_123_777()
-                self.step_stop("get_table_123_777")
         else:
             print("Image is not valid. Data was not parsed.")
             self.all_data_not_found = True
