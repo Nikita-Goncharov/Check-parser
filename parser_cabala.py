@@ -29,7 +29,7 @@ def step_decorator(l_name_step):
             self = args[0]
             self.StepTimeStart = datetime.datetime.now()
             self.StepNum += 1
-            fn(*args, **kwargs)
+            return_value = fn(*args, **kwargs)
             TimeTask = str((datetime.datetime.now() - self.TaskTimeStart))
             TimeTest = str((datetime.datetime.now() - self.StepTimeStart))
             if self.StepLogAdd:
@@ -41,6 +41,7 @@ def step_decorator(l_name_step):
             self.job_error = True if self.StepStatus != "OK" else False
             self.StepStatus = "OK"
             self.job_log(str_log)
+            return return_value
 
         return wrapper
 
@@ -48,6 +49,42 @@ def step_decorator(l_name_step):
 
 
 class ParserChecks:
+    # Distance from lines to needed elements
+    games_elements_distance = {
+        "123": {
+            "spaced_number": [340, "bottom_line"],
+            "date": [55, "bottom_line"],
+            "game_id": [20, "bottom_line"],
+            "sum": [240, "bottom_line"],
+            "game_subtype": [75, "bottom_line"],
+            "game_type": [180, "top_line"],
+        },
+        "777": {
+            "spaced_number": [310, "bottom_line"],
+            "date": [55, "bottom_line"],
+            "game_id": [20, "bottom_line"],
+            "sum": [210, "bottom_line"],
+            "game_subtype": [75, "bottom_line"],
+            "game_type": [180, "top_line"],
+        },
+        "chance": {
+            "spaced_number": [340, "bottom_line"],
+            "date": [55, "bottom_line"],
+            "game_id": [20, "bottom_line"],
+            "sum": [240, "bottom_line"],
+            "game_subtype": [75, "bottom_line"],
+            "game_type": [190, "top_line"],
+        },
+        "lotto": {
+            "spaced_number": [310, "bottom_line"],
+            "date": [55, "bottom_line"],
+            "game_id": [20, "bottom_line"],
+            "sum": [210, "bottom_line"],
+            "game_subtype": [75, "middle_line"],
+            "game_type": [000, "top_line"],
+        }
+    }
+
     def __init__(self, img_path, log_dir="", debug_img_dir=""):
         self.img_path = img_path  # name file
         self.img_filename = os.path.basename(img_path).split(".")[0].strip()
@@ -88,7 +125,6 @@ class ParserChecks:
         self.set_log()
         self.job_log("" + "*" * 40)
         self.job_log(f'***** START job {img_path} ******')
-        #
 
     def set_log(self):
         log_file = os.path.join(self.log_dir, f'parser_cabala.log')
@@ -135,42 +171,6 @@ class ParserChecks:
 
     @step_decorator("set_param")
     def set_param(self):
-        # Distance from lines to needed elements
-        self.games_elements_distance = {
-            "123": {
-                "spaced_number": [340, "bottom_line"],
-                "date": [55, "bottom_line"],
-                "game_id": [20, "bottom_line"],
-                "sum": [240, "bottom_line"],
-                "game_subtype": [75, "bottom_line"],
-                "game_type": [180, "top_line"],
-            },
-            "777": {
-                "spaced_number": [310, "bottom_line"],
-                "date": [55, "bottom_line"],
-                "game_id": [20, "bottom_line"],
-                "sum": [210, "bottom_line"],
-                "game_subtype": [75, "bottom_line"],
-                "game_type": [180, "top_line"],
-            },
-            "chance": {
-                "spaced_number": [340, "bottom_line"],
-                "date": [55, "bottom_line"],
-                "game_id": [20, "bottom_line"],
-                "sum": [240, "bottom_line"],
-                "game_subtype": [75, "bottom_line"],
-                "game_type": [190, "top_line"],
-            },
-            "lotto": {
-                "spaced_number": [310, "bottom_line"],
-                "date": [55, "bottom_line"],
-                "game_id": [20, "bottom_line"],
-                "sum": [210, "bottom_line"],
-                "game_subtype": [75, "middle_line"],
-                "game_type": [000, "top_line"],
-            }
-        }
-
         self.qr_code_info = {}
         self.main_data_contours = {
             "game_ids_count": 0,
@@ -211,23 +211,6 @@ class ParserChecks:
         }
         # if here exists pairs, then that data was parsed incorrect, example: "dashed_number": True
         self.is_incorrect_check_info = {}
-
-    # def step_start(self):
-    #     self.StepTimeStart = datetime.datetime.now()
-    #     self.StepNum += 1
-    #
-    # def step_stop(self, l_name_step=""):
-    #     TimeTask = str((datetime.datetime.now() - self.TaskTimeStart))
-    #     TimeTest = str((datetime.datetime.now() - self.StepTimeStart))
-    #     if self.StepLogAdd:
-    #         str_log = f"{self.StepLogAdd}"
-    #         self.StepLog += str_log + "\n"
-    #     self.StepLogAdd = ''
-    #     str_log = f"  {str(self.StepNum).zfill(2)} = {TimeTask} = {TimeTest} = {l_name_step} = {self.StepStatus}"
-    #     self.StepLog += str_log + "\n"
-    #     self.job_error = True if self.StepStatus != "OK" else False
-    #     self.StepStatus = "OK"
-    #     self.job_log(str_log)
 
     def job_log(self, l_text=""):
         self.log_parser.info(l_text)
@@ -315,20 +298,12 @@ class ParserChecks:
                     break
 
     @staticmethod
-    def resize_img(img):
+    def resize_img(img, target_width=972):
         height, width = img.shape[:2]
-        if width > height:
-            # If image inverted
-            target_height = 972
-            ratio = target_height / height
-            target_width = int(width * ratio)
-        else:
-            # If image OK
-            target_width = 972
-            ratio = target_width / width
-            target_height = int(height * ratio)
+        ratio = target_width / width
+        target_height = int(height * ratio)
 
-        resized_image = cv2.resize(img, (target_width, target_height))
+        resized_image = cv2.resize(img, (target_width, target_height), interpolation=cv2.INTER_CUBIC)
         return resized_image
 
     @step_decorator("img_prep")
@@ -342,12 +317,6 @@ class ParserChecks:
             self.StepLogAdd = f'\n  img_height_center, img_width_center = {self.img_height_centr}, {self.img_width_centr}'
 
             self.save_pic_debug(self.img_original, f"img_original_01.jpg")
-
-            img_rotate = None
-            qrcode_position = "down"
-            qrcode_position = "left"
-            qrcode_position = "right"
-            qrcode_position = "top"
 
             # img check
             self.qr_code_read()
@@ -405,40 +374,15 @@ class ParserChecks:
                     }
                 self.check_info["qr_code_link"] = self.qrcode_data
 
-                # self.img_grayscale = self.img_original.copy()
-                # self.img_grayscale = cv2.cvtColor(self.img_grayscale, cv2.COLOR_BGR2GRAY)
-                # self.save_pic_debug(self.img_grayscale, f"img_grayscale_01.jpg")
-                # # copy wb
-                # #
-                # contrast = .99  # (0-127)
-                # brightness = .1  # (0-100)
-                # contrasted_img = cv2.addWeighted(
-                #     self.img_grayscale,
-                #     contrast,
-                #     self.img_grayscale, 0,
-                #     brightness
-                # )
-                # blured_img_main = cv2.bilateralFilter(contrasted_img, 1, 75, 75)
-                # self.save_pic_debug(blured_img_main, f"img_wb_blured_01.jpg")
-                # im_bw = cv2.threshold(blured_img_main, 170, 255, cv2.THRESH_TOZERO)[1]
-                # self.wb_blured_img = cv2.threshold(im_bw, 10, 255, cv2.THRESH_BINARY)[1]
-                # self.save_pic_debug(self.wb_blured_img, f"img_wb_blured_02.jpg")
-                # self.wb_blured_img = self._denoise_wb_img(self.wb_blured_img)
-
-
-                # Extract the red channel
                 red_channel = self.img_original[:, :, 2]  # Red channel index is 2
-                # Create a mask where red channel values are greater than 200
                 mask = red_channel > 200
-                # Replace pixels where mask is True with white
-                self.img_original[mask] = [255, 255, 255]
+                self.img_original[mask] = [255, 255, 255]  # Replace pixels where mask is True with white
 
                 image = cv2.cvtColor(self.img_original, cv2.COLOR_BGR2GRAY)
                 wb_image = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY)[1]
                 blured_img_main = cv2.bilateralFilter(wb_image, 1, 75, 75)
                 self.wb_blured_img = cv2.threshold(blured_img_main, 170, 255, cv2.THRESH_TOZERO)[1]
 
-                # self.wb_blured_img = cv2.threshold(im_bw, 10, 255, cv2.THRESH_BINARY)[1]
                 self.save_pic_debug(self.wb_blured_img, f"img_wb_blured_03.jpg")
 
                 print("FINISH img_prep")
@@ -453,6 +397,37 @@ class ParserChecks:
             self.job_log(f'  check_prepare_pict_02 = {ex} ')
             self.StepStatus = ex
 
+    @staticmethod
+    def crop_check(img):
+        """Extracting vertical lines through morphology operations
+
+        """
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.bitwise_not(gray)
+        bw = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -2)
+
+        vertical = np.copy(bw)
+        height = vertical.shape[0]
+        verticalsize = height // 30
+        verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, verticalsize))
+        vertical = cv2.erode(vertical, verticalStructure)
+        vertical = cv2.dilate(vertical, verticalStructure)
+
+        # Find vertical check contours
+        contours = cv2.findContours(vertical, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
+        contours = [cv2.boundingRect(cnt) for cnt in contours]
+        contours.sort(key=lambda cnt: cnt[3])
+        # Take two biggest(right and left), check borders
+        check_borders = contours[-2:]
+        check_borders.sort(key=lambda cnt: cnt[0])
+        border1, border2 = check_borders
+
+        result_image = img[
+            0:height,
+            border1[0] + border1[2]:border2[0]
+        ]
+        return result_image
+
     def rotate_and_crop_check(self):
         gray = cv2.cvtColor(self.img_original, cv2.COLOR_BGR2GRAY)
         gray = cv2.bitwise_not(gray)
@@ -460,7 +435,6 @@ class ParserChecks:
 
         coords = np.column_stack(np.where(thresh > 0))
         angle = cv2.minAreaRect(coords)[-1]
-        # print(angle)
         if angle < 30:
             angle = -angle
         else:
@@ -473,28 +447,28 @@ class ParserChecks:
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated = cv2.warpAffine(self.img_original, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
-        # TODO: remove it, make cropping more accurate
-        self.rotated_img = self.img_original = rotated
+        self.img_original = rotated
 
         self.save_pic_debug(rotated, f"rotated_check.jpg")
 
         if abs(angle) > 1:
-            img = cv2.cvtColor(rotated, cv2.COLOR_BGR2HSV)
-            thresh = cv2.inRange(img, (0, 0, 0), (255, 255, 232))
-            thresh = cv2.threshold(thresh, 200, 255, cv2.THRESH_BINARY_INV)[1]
-
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
-            morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-
-            contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            contours = contours[0] if len(contours) == 2 else contours[1]
-            big_contour = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(big_contour)
-
-            cropped = rotated[
-                0:thresh.shape[0],
-                x:x + w
-            ]
+            cropped = self.crop_check(rotated)
+            # img = cv2.cvtColor(rotated, cv2.COLOR_BGR2HSV)
+            # thresh = cv2.inRange(img, (0, 0, 0), (255, 255, 232))
+            # thresh = cv2.threshold(thresh, 200, 255, cv2.THRESH_BINARY_INV)[1]
+            #
+            # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+            # morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+            #
+            # contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # contours = contours[0] if len(contours) == 2 else contours[1]
+            # big_contour = max(contours, key=cv2.contourArea)
+            # x, y, w, h = cv2.boundingRect(big_contour)
+            #
+            # cropped = rotated[
+            #     0:thresh.shape[0],
+            #     x:x + w
+            # ]
             self.img_original = cropped
             self.save_pic_debug(cropped, f"cropped_check.jpg")
         self.img_height, self.img_width = self.img_original.shape[:2]
@@ -544,21 +518,21 @@ class ParserChecks:
             strong_contour_nums.sort(key=lambda cnt: [1])
         return regular_contour_nums, strong_contour_nums
 
-    @staticmethod
-    def _denoise_wb_img(cropped_img, noise_width=3, noise_height=3):
-        contours = cv2.findContours(cropped_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]  # CHAIN_APPROX_NONE
-        contours = [cv2.boundingRect(cnt) for cnt in contours]
-
-        contours = sorted(contours, key=lambda cnt: cnt[2] * cnt[3])
-        for cnt in contours:
-            x, y, w, h = cnt
-            if w < noise_width or h < noise_height:
-                for i in range(h):
-                    for j in range(w):
-                        cropped_img[y + i, x + j] = 255
-            else:
-                break
-        return cropped_img
+    # @staticmethod
+    # def _denoise_wb_img(cropped_img, noise_width=3, noise_height=3):
+    #     contours = cv2.findContours(cropped_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]  # CHAIN_APPROX_NONE
+    #     contours = [cv2.boundingRect(cnt) for cnt in contours]
+    #
+    #     contours = sorted(contours, key=lambda cnt: cnt[2] * cnt[3])
+    #     for cnt in contours:
+    #         x, y, w, h = cnt
+    #         if w < noise_width or h < noise_height:
+    #             for i in range(h):
+    #                 for j in range(w):
+    #                     cropped_img[y + i, x + j] = 255
+    #         else:
+    #             break
+    #     return cropped_img
 
     @staticmethod
     def _find_missed_contours(contours):
@@ -590,14 +564,6 @@ class ParserChecks:
                 (last_symbol_cnt[0] + 2, last_symbol_cnt[1], last_symbol_cnt[2], last_symbol_cnt[3])
             )
         return updated_contours
-
-    @staticmethod
-    def resize_cropped_img(img, target_width):
-        height, width = img.shape[:2]
-        ratio = target_width / width
-        target_height = int(height * ratio)
-        resized_img = cv2.resize(img, (target_width, target_height))
-        return resized_img
 
     def data_incorrect_parsed_log(self, stringed_error, data_key):
         print(stringed_error)
@@ -740,13 +706,11 @@ class ParserChecks:
                 bottom_line["y"]:self.img_height,
                 0:self.img_width
             ]
-            kernel = np.ones((2, 2), np.uint8)
-            bold_check_bottom_part = cv2.erode(check_bottom_part, kernel, iterations=1)
 
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (60, 5))
-            img = cv2.morphologyEx(bold_check_bottom_part, cv2.MORPH_OPEN, kernel)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (60, 1))
+            img = cv2.morphologyEx(check_bottom_part, cv2.MORPH_OPEN, kernel)
+
             self.save_pic_debug(img, f"main_data_contours/main_data_blocks.png")
-
             contours = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
             contours = [cv2.boundingRect(cnt) for cnt in contours]
 
@@ -913,11 +877,12 @@ class ParserChecks:
     @step_decorator("get_dashed_number")
     def get_dashed_number(self):
         try:
-            decoded_objects = pyzbar.decode(self.rotated_img, symbols=[pyzbar.ZBarSymbol.I25])
+            decoded_objects = pyzbar.decode(self.img_original, symbols=[pyzbar.ZBarSymbol.I25])
+            print("DASHED NUMBER CODE: ", decoded_objects)
             self.check_info["dashed_number"] = decoded_objects[0].data.decode("utf-8")[:-1]  # Read with no needed "0" at the end
-        except:
+        except Exception as ex:
             self.data_incorrect_parsed_log(
-                f"The length of the number is not correct, error occurred(dashed_number)",
+                f"The length of the number is not correct, error occurred(dashed_number): {ex}",
                 "dashed_number"
             )
             self.StepStatus = "FAIL"
@@ -989,14 +954,13 @@ class ParserChecks:
                 one_suit_contours = sorted(one_suit_contours, key=lambda contour: contour[1])  # sort by OY
                 unique_suit_contours = self._unique_contours(one_suit_contours, data_type="cards")
                 unique_contours.extend(unique_suit_contours)
-            # print(sorted_contours)
-            print(unique_contours)
+
             for i, contour in enumerate(unique_contours):
                 one_card_img = cards_img[
                     contour[1]:contour[1]+contour[3],
                     contour[0]:contour[0] + contour[2],
                 ]
-                # TODO: refactor
+
                 x_card_coord = contour[0]
                 if x_card_coord in ox_coord_range_suit["0"]:
                     card_type = "spades"
@@ -1032,22 +996,18 @@ class ParserChecks:
             ]
             self.save_pic_debug(crop_img, f"table/table.jpg")
             crop_img_original = crop_img.copy()
-            crop_img_blured = cv2.GaussianBlur(crop_img, (41, 41), 1)
-            crop_img = cv2.threshold(crop_img_blured, 200, 255, cv2.THRESH_BINARY)[1]
-            self.save_pic_debug(crop_img, f"table/table_blured.jpg")
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
-            img_dilated = cv2.dilate(cv2.threshold(crop_img, 127, 255, cv2.THRESH_BINARY_INV)[1], kernel)
-            # cv2.imshow("", img_dilated)
-            # cv2.waitKey(0)
-            # exit()
+            crop_img_inv = cv2.threshold(crop_img, 200, 255, cv2.THRESH_BINARY_INV)[1]
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 9))
+            dilated_img = cv2.dilate(crop_img_inv, kernel)
+            self.save_pic_debug(dilated_img, f"table/dilated_table.jpg")
 
-            contours = cv2.findContours(img_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+            contours = cv2.findContours(dilated_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
             info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
 
             # Remove garbage contours
-            min_width = 30 if game_type == "123" else 17
-            max_width = 60 if game_type == "123" else 35
-            min_height = 35 if game_type == "123" else 35
+            min_width = 40 if game_type == "123" else 17
+            max_width = 55 if game_type == "123" else 35
+            min_height = 40 if game_type == "123" else 35
 
             sorted_contours = [contour for contour in info_of_contours if contour[2] >= min_width and contour[2] <= max_width and contour[3] >= min_height]
 
@@ -1679,12 +1639,7 @@ class ParserChecks:
             img = cv2.imread(f"template_images/cards_{card_type}.png")
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            # TODO: change to staticmethod
-            height, width = cropped_img.shape[:2]
-            target_width = 127
-            ratio = target_width / width
-            target_height = int(height * ratio)
-            resized_card = cv2.resize(cropped_img, (target_width, target_height))
+            resized_card = self.resize_img(cropped_img, target_width=127)
             resized_card = cv2.threshold(resized_card, 200, 255, cv2.THRESH_BINARY)[1]
 
             res = cv2.matchTemplate(img, resized_card, cv2.TM_CCOEFF_NORMED)
@@ -1706,7 +1661,6 @@ class ParserChecks:
     def get_result(self):
         # All should be called in this way
         self.set_param()
-
         self.img_prep()
 
         if self.img_is_valid:
@@ -1715,8 +1669,6 @@ class ParserChecks:
             self.job_log(f"Main check lines: {self.longest_lines}")
 
             game_type = self.get_game_type()
-            # game_type = self.check_info["game_type"]
-
             self.get_game_subtype()
             self.get_main_data_contours()
             self.get_game_id()
@@ -1735,13 +1687,9 @@ class ParserChecks:
         else:
             print("Image is not valid. Data was not parsed.")
             self.all_data_not_found = True
-
         return self.check_info, self.all_data_not_found, self.is_incorrect_check_info, self.StepLogFull
 
 
-
-# TODO: check 123, 777
-# TODO: change in get_result() from step_start and step_stop to decorator
-# TODO: REFACTOR !!!!
+# TODO: check 777, lotto
 # TODO: find "autofilling" data near subtype
 # TODO: Type hints ???
