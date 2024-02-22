@@ -453,22 +453,6 @@ class ParserChecks:
 
         if abs(angle) > 1:
             cropped = self.crop_check(rotated)
-            # img = cv2.cvtColor(rotated, cv2.COLOR_BGR2HSV)
-            # thresh = cv2.inRange(img, (0, 0, 0), (255, 255, 232))
-            # thresh = cv2.threshold(thresh, 200, 255, cv2.THRESH_BINARY_INV)[1]
-            #
-            # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
-            # morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-            #
-            # contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # contours = contours[0] if len(contours) == 2 else contours[1]
-            # big_contour = max(contours, key=cv2.contourArea)
-            # x, y, w, h = cv2.boundingRect(big_contour)
-            #
-            # cropped = rotated[
-            #     0:thresh.shape[0],
-            #     x:x + w
-            # ]
             self.img_original = cropped
             self.save_pic_debug(cropped, f"cropped_check.jpg")
         self.img_height, self.img_width = self.img_original.shape[:2]
@@ -994,6 +978,17 @@ class ParserChecks:
                 self.longest_lines["top_line"]["y"]:bottom_oy_border,
                 0:self.img_width
             ]
+            if self.bottom_oy_border_for_table != 0:  # Add some space at the bottom if image was cropped
+                crop_img = cv2.copyMakeBorder(
+                    crop_img,
+                    top=0,
+                    bottom=10,
+                    right=0,
+                    left=0,
+                    value=[255, 255, 255],
+                    borderType=cv2.BORDER_CONSTANT
+                )
+
             self.save_pic_debug(crop_img, f"table/table.jpg")
             crop_img_original = crop_img.copy()
             crop_img_inv = cv2.threshold(crop_img, 200, 255, cv2.THRESH_BINARY_INV)[1]
@@ -1005,9 +1000,9 @@ class ParserChecks:
             info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
 
             # Remove garbage contours
-            min_width = 40 if game_type == "123" else 17
-            max_width = 55 if game_type == "123" else 35
-            min_height = 40 if game_type == "123" else 35
+            min_width = 40
+            max_width = 55
+            min_height = 40
 
             sorted_contours = [contour for contour in info_of_contours if contour[2] >= min_width and contour[2] <= max_width and contour[3] >= min_height]
 
@@ -1044,6 +1039,45 @@ class ParserChecks:
                         self.check_info["table"][f"line_{index + 1}"]["regular"].append(int(table_number))
 
             elif game_type == "777":
+                # TODO: refactor
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 1))
+                k = cv2.getStructuringElement(cv2.MORPH_RECT, (19, 1))
+                closing = cv2.morphologyEx(crop_img, cv2.MORPH_OPEN, k)
+                self.save_pic_debug(closing, f"table/closing_img.jpg")
+
+                img_dilated = cv2.dilate(cv2.threshold(closing, 127, 255, cv2.THRESH_BINARY_INV)[1], kernel)
+
+                contours = cv2.findContours(img_dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
+                info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
+                self.save_pic_debug(img_dilated, f"table/dilated_table.jpg")
+
+                game_subtype = self.check_info["game_subtype"]
+                count_nums_by_sybtype = {
+                    "777_regular": 7,
+                    "777_col8": 8,
+                    "777_col9": 9
+                }
+                if game_subtype == "777_regular":  # TODO: REFACTOR!!!!
+                    min_width = 60
+                    max_width = 75
+                    min_height = 35
+                    max_height = 50
+                elif game_subtype == "777_col8":
+                    min_width = 55
+                    max_width = 70
+                    min_height = 34
+                    max_height = 50
+                else:  # 777_col9
+                    min_width = 47
+                    max_width = 60
+                    min_height = 35
+                    max_height = 45
+
+                sorted_contours = [contour for contour in info_of_contours if
+                                   contour[2] >= min_width and contour[2] <= max_width and contour[3] >= min_height and contour[3] <= max_height]
+                print(info_of_contours, len(info_of_contours))
+                print(sorted_contours, len(sorted_contours))
+
                 current_line = 0
                 numbers_in_lines = []
                 prev_number_OY = 0
@@ -1067,30 +1101,55 @@ class ParserChecks:
                     numbers_in_lines[index] = line
 
                 for index, line in enumerate(numbers_in_lines):
-                    stringed_numbers = ""
-                    for number in line:
-                        crop_number = crop_img_original[
-                            number[1]:number[1] + number[3],
-                            number[0]:number[0] + number[2]
+                    for j, number in enumerate(line):
+                        # At the end of every line exist number of that line. And its contour can be in "numbers_in_lines"
+                        # So we should break loop
+                        if j >= count_nums_by_sybtype[game_subtype]:
+                            break
+                        x, y, w, h = number
+                        OX_between_digits = w // 2
+                        number_img = crop_img_original[
+                            y:y+h,
+                            x:x+w
                         ]
-                        table_number = self.get_value_from_image(crop_number, "table")
-                        stringed_numbers += table_number
 
-                    # merge numbers by two
-                    i = 0
-                    while i < len(stringed_numbers):
-                        try:
-                            make_resulted_number = f"{stringed_numbers[i]}{stringed_numbers[i + 1]}"
-                        except:
-                            make_resulted_number = f"{stringed_numbers[i]}"
-                            print(f"Not all regular numbers were found in table line")
+                        digit1_img = crop_img_original[
+                            y:y+h,
+                            x:x+OX_between_digits
+                        ]
+                        digit2_img = crop_img_original[
+                            y:y + h,
+                            x+OX_between_digits:x+w
+                        ]
+                        # TODO: refactor
+                        if game_subtype == "777_col8":
+                            digit1_h, digit1_w = digit1_img.shape[:2]
+                            digit1_img = cv2.resize(digit1_img, (digit1_w + 2, digit1_h))
+                            digit2_h, digit2_w = digit2_img.shape[:2]
+                            digit2_img = cv2.resize(digit2_img, (digit2_w + 2, digit2_h))
+                        elif game_subtype == "777_col9":
+                            digit1_h, digit1_w = digit1_img.shape[:2]
+                            digit1_img = cv2.resize(digit1_img, (digit1_w + 5, digit1_h))
+                            digit2_h, digit2_w = digit2_img.shape[:2]
+                            digit2_img = cv2.resize(digit2_img, (digit2_w + 5, digit2_h))
 
-                        if not self.check_info["table"].get(f"line_{index + 1}", False):
+
+                        self.save_pic_debug(number_img, f"table/number({j}, {index}).jpg")
+                        self.save_pic_debug(digit1_img, f"table/digit1({j}, {index}).jpg")
+                        self.save_pic_debug(digit2_img, f"table/digit2({j}, {index}).jpg")
+
+                        digit1 = self.get_value_from_image(digit1_img, "table")
+                        digit2 = self.get_value_from_image(digit2_img, "table")
+
+                        if not self.check_info["table"].get(f"line_{index + 1}", False):  # If line does not exist - create
                             self.check_info["table"][f"line_{index + 1}"] = {
                                 "regular": []
                             }
-                        self.check_info["table"][f"line_{index + 1}"]["regular"].append(int(make_resulted_number))
-                        i += 2
+                        self.check_info["table"][f"line_{index + 1}"]["regular"].append(int(f"{digit1}{digit2}"))
+                    count_found_line_nums = len(self.check_info["table"][f"line_{index + 1}"]["regular"])
+                    count_needed_line_nums = count_nums_by_sybtype[game_subtype]
+                    if count_found_line_nums != count_needed_line_nums:
+                        print("Error. Not All numbers in line were found")
         except Exception as ex:
             self.data_incorrect_parsed_log(
                 f"Table was not found, error occurred(get_table_123_777): {ex}",
