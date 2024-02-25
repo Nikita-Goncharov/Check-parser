@@ -4,6 +4,7 @@ import os
 import logging
 import logging.config
 import datetime
+import random
 
 import cv2
 import cv2.cuda
@@ -941,7 +942,7 @@ class ParserChecks:
 
             for i, contour in enumerate(unique_contours):
                 one_card_img = cards_img[
-                    contour[1]:contour[1]+contour[3],
+                    contour[1]:contour[1] + contour[3],
                     contour[0]:contour[0] + contour[2],
                 ]
 
@@ -1695,11 +1696,20 @@ class ParserChecks:
 
         elif data_type.startswith("card"):
             card_type = data_type.split("_")[1]
-            img = cv2.imread(f"template_images/cards_{card_type}.png")
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-            resized_card = self.resize_img(cropped_img, target_width=127)
+            img = cv2.imread(f"template_images/cards_{card_type}.png", 0)
+            img = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY)[1]
+            # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            #
+            resized_card = self.resize_img(cropped_img, target_width=128)
             resized_card = cv2.threshold(resized_card, 200, 255, cv2.THRESH_BINARY)[1]
+            h, w = resized_card.shape[:2]
+
+            # There is card with white pixels by sides. We should crop them
+            resized_card = resized_card[
+                20:h-20,
+                20:w-20
+            ]
+            self.save_pic_debug(resized_card, f"cards/resized_card_img_{random.randint(0, 10_000)}.jpg")
 
             res = cv2.matchTemplate(img, resized_card, cv2.TM_CCOEFF_NORMED)
             y, x = np.unravel_index(res.argmax(), res.shape)
