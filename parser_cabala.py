@@ -241,7 +241,7 @@ class ParserChecks:
         if decoded_objects == []:
             removed_red_img = self.img_original.copy()
             red_channel = removed_red_img[:, :, 2]
-            mask = red_channel > 150  # TODO: test with more count of checks
+            mask = red_channel > 150
             removed_red_img[mask] = [255, 255, 255]
             decoded_objects = pyzbar.decode(removed_red_img, symbols=[pyzbar.ZBarSymbol.QRCODE])
         print("******************")
@@ -1925,14 +1925,8 @@ class ParserChecks:
 
 
 # TODO: refactor wrote code
+# TODO: add logging to all wrote code
 # TODO: retest all other checks
 
-# TODO: test
-# Systematic
-# Strong
-# Qr code read
-# Regular
-# Double
-# Extra
 
 # TODO: find "autofilling" data near subtype
