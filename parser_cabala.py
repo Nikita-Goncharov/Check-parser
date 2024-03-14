@@ -237,13 +237,19 @@ class ParserChecks:
 
     def qr_code_read(self):
         # read qrcode
-        decoded_objects = pyzbar.decode(self.img_original, symbols=[pyzbar.ZBarSymbol.QRCODE])
-        if decoded_objects == []:
-            removed_red_img = self.img_original.copy()
-            red_channel = removed_red_img[:, :, 2]
-            mask = red_channel > 150
-            removed_red_img[mask] = [255, 255, 255]
+        next_red_channel = 220
+        removed_red_img = self.img_original.copy()
+        # Decrease red channel of pixels, while qr code is not decoded
+        while next_red_channel > 30:
             decoded_objects = pyzbar.decode(removed_red_img, symbols=[pyzbar.ZBarSymbol.QRCODE])
+            if decoded_objects:
+                break
+
+            red_channel = removed_red_img[:, :, 2]
+            mask = red_channel > next_red_channel
+            removed_red_img[mask] = [255, 255, 255]
+            next_red_channel -= 20
+
         print("******************")
         print("decoded_objects = ", decoded_objects)
         print("******************")
@@ -1224,18 +1230,11 @@ class ParserChecks:
                             y:y + h,
                             x+OX_between_digits:x+w
                         ]
-                        # TODO: refactor
-                        # FIXME: do threshold
-                        if game_subtype == "777_col8":
-                            digit1_h, digit1_w = digit1_img.shape[:2]
-                            digit1_img = cv2.resize(digit1_img, (digit1_w + 2, digit1_h))
-                            digit2_h, digit2_w = digit2_img.shape[:2]
-                            digit2_img = cv2.resize(digit2_img, (digit2_w + 2, digit2_h))
-                        elif game_subtype == "777_col9":
-                            digit1_h, digit1_w = digit1_img.shape[:2]
-                            digit1_img = cv2.resize(digit1_img, (digit1_w + 5, digit1_h))
-                            digit2_h, digit2_w = digit2_img.shape[:2]
-                            digit2_img = cv2.resize(digit2_img, (digit2_w + 5, digit2_h))
+                        added_width = 2 if game_subtype == "777_col8" else 5
+                        digit1_h, digit1_w = digit1_img.shape[:2]
+                        digit1_img = cv2.resize(digit1_img, (digit1_w + added_width, digit1_h))
+                        digit2_h, digit2_w = digit2_img.shape[:2]
+                        digit2_img = cv2.resize(digit2_img, (digit2_w + added_width, digit2_h))
 
                         self.save_pic_debug(digit1_img, f"table/digit1({j}, {index}).jpg")
                         self.save_pic_debug(digit2_img, f"table/digit2({j}, {index}).jpg")
@@ -1319,7 +1318,7 @@ class ParserChecks:
             number_contours = cv2.findContours(dilated_regular, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
             number_contours = [cv2.boundingRect(cnt) for cnt in number_contours]
             regular_number_contours = [contour for contour in number_contours if
-                                       contour[2] >= 40 and contour[3] >= 30]
+                                       contour[2] >= 40 and contour[2] <= 60 and contour[3] >= 30 and contour[3] <= 40]
 
             number_contours = cv2.findContours(dilated_strong, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
             number_contours = [cv2.boundingRect(cnt) for cnt in number_contours]
@@ -1769,7 +1768,7 @@ class ParserChecks:
 
                 lines_contours = list(filter(lambda cnt: cnt[2] > 6, lines_contours))
 
-                def minimal_black_pixels_count(contour_tuple):  # TODO: change from function to method
+                def minimal_black_pixels_count(contour_tuple):
                     x, y, w, h = contour_tuple
                     cropped_contour = block[
                         y:y + h,
@@ -1926,7 +1925,5 @@ class ParserChecks:
 
 # TODO: refactor wrote code
 # TODO: add logging to all wrote code
-# TODO: retest all other checks
-
 
 # TODO: find "autofilling" data near subtype

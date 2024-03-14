@@ -6,7 +6,7 @@ from parser_cabala import ParserChecks
 if __name__ == "__main__":
     # Code for testing
     checks_count = 0
-    check_folder = "777"  # "/home/nikita-goncharov/Desktop/Failed_checks"  # checks directory
+    check_folder = "/home/nikita-goncharov/Desktop/Failed_checks"  # "/home/nikita-goncharov/Desktop/Failed_checks"  # checks directory
     checks_list = os.listdir(check_folder)
 
     item_log_dir = os.path.join("..", "log")

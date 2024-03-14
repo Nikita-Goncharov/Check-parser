@@ -1,9 +1,19 @@
 # import os
 #
-# import cv2
-# import numpy as np
+import cv2
+import numpy as np
 # from colorama import init, Fore, Back
-# from pyzbar import pyzbar
+from pyzbar import pyzbar
+
+
+# TODO: lotto do max width check and square check too
+
+img = cv2.imread("/home/nikita-goncharov/Desktop/Failed_checks/12131.jpeg")
+red_channel = img[:, :, 2]
+mask = red_channel > 120
+img[mask] = [255, 255, 255]
+print(pyzbar.decode(img, symbols=[pyzbar.ZBarSymbol.QRCODE]))
+
 #
 # init(autoreset=True)
 #
@@ -360,59 +370,59 @@
 # cv2.waitKey(0)
 
 
-import cv2
-import numpy as np
-
-image = cv2.imread("rotated_check.jpg")
-
-
-def crop_img(img):
-    """Extracting vertical lines through morphology operations
-
-    """
-    h, w = img.shape[:2]
-    hsv = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2HSV)
-    h_min = np.array((0, 0, 0), np.uint8)
-    h_max = np.array((255, 255, 213), np.uint8)
-    thresh = cv2.inRange(hsv, h_min, h_max)
-
-    wb_img = cv2.threshold(thresh, 127, 255, cv2.THRESH_BINARY_INV)[1]
-
-    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 45))
-    wb_img = cv2.dilate(wb_img, v_kernel)
-
-    k = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 31))
-    wb_img = cv2.morphologyEx(wb_img, cv2.MORPH_OPEN, k)
-
-    contours = cv2.findContours(cv2.threshold(wb_img, 127, 255, cv2.THRESH_BINARY_INV)[1], cv2.RETR_LIST,
-                                cv2.CHAIN_APPROX_SIMPLE)[0]
-    contours = [cv2.boundingRect(cnt) for cnt in contours]
-    contours = [cnt for cnt in contours if cnt[3] >= (h // 3) * 2]
-    contours.sort(key=lambda cnt: cnt[3])  # sort by height
-    side_lines = contours[-2:]
-    side_lines.sort(key=lambda cnt: cnt[0])
-    if len(side_lines) == 2:
-        l_line = side_lines[0]
-        r_line = side_lines[1]
-        resulted_img = img[
-                       0:h,
-                       l_line[0] + l_line[2]:r_line[0]
-                       ]
-    else:  # one line
-        if side_lines[0][0] < w // 2:  # if line OX in first half of image then it is left line else right
-            l_line = side_lines[0]
-            resulted_img = img[
-                           0:h,
-                           l_line[0] + l_line[2]:w
-                           ]
-        else:
-            r_line = side_lines[0]
-            resulted_img = img[
-                           0:h,
-                           0:r_line[0]
-                           ]
-    return resulted_img
-
-
-cv2.imshow("", crop_img(image))
-cv2.waitKey(0)
+# import cv2
+# import numpy as np
+#
+# image = cv2.imread("rotated_check.jpg")
+#
+#
+# def crop_img(img):
+#     """Extracting vertical lines through morphology operations
+#
+#     """
+#     h, w = img.shape[:2]
+#     hsv = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2HSV)
+#     h_min = np.array((0, 0, 0), np.uint8)
+#     h_max = np.array((255, 255, 213), np.uint8)
+#     thresh = cv2.inRange(hsv, h_min, h_max)
+#
+#     wb_img = cv2.threshold(thresh, 127, 255, cv2.THRESH_BINARY_INV)[1]
+#
+#     v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 45))
+#     wb_img = cv2.dilate(wb_img, v_kernel)
+#
+#     k = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 31))
+#     wb_img = cv2.morphologyEx(wb_img, cv2.MORPH_OPEN, k)
+#
+#     contours = cv2.findContours(cv2.threshold(wb_img, 127, 255, cv2.THRESH_BINARY_INV)[1], cv2.RETR_LIST,
+#                                 cv2.CHAIN_APPROX_SIMPLE)[0]
+#     contours = [cv2.boundingRect(cnt) for cnt in contours]
+#     contours = [cnt for cnt in contours if cnt[3] >= (h // 3) * 2]
+#     contours.sort(key=lambda cnt: cnt[3])  # sort by height
+#     side_lines = contours[-2:]
+#     side_lines.sort(key=lambda cnt: cnt[0])
+#     if len(side_lines) == 2:
+#         l_line = side_lines[0]
+#         r_line = side_lines[1]
+#         resulted_img = img[
+#                        0:h,
+#                        l_line[0] + l_line[2]:r_line[0]
+#                        ]
+#     else:  # one line
+#         if side_lines[0][0] < w // 2:  # if line OX in first half of image then it is left line else right
+#             l_line = side_lines[0]
+#             resulted_img = img[
+#                            0:h,
+#                            l_line[0] + l_line[2]:w
+#                            ]
+#         else:
+#             r_line = side_lines[0]
+#             resulted_img = img[
+#                            0:h,
+#                            0:r_line[0]
+#                            ]
+#     return resulted_img
+#
+#
+# cv2.imshow("", crop_img(image))
+# cv2.waitKey(0)
