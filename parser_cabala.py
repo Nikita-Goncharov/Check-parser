@@ -7,7 +7,6 @@ import datetime
 import random
 
 import cv2
-import cv2.cuda
 import numpy as np
 from pyzbar import pyzbar
 
@@ -653,6 +652,24 @@ class ParserChecks:
 
         return regular_img, strong_img
 
+    @staticmethod
+    def remove_digit_white_space(digit_img):
+        img = digit_img.copy()
+        h, w = img.shape[:2]
+        contours = cv2.findContours(cv2.threshold(img, 127, 255, cv2.THRESH_BINARY_INV)[1], cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
+        info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
+        info_of_contours.sort(key=lambda cnt: cnt[0])  # by OX
+        print("DIGIT contours", info_of_contours)
+        start_x = info_of_contours[0][0]  # first contour OX
+
+        # Here we should take as end OX contour with the biggest sum(OX and width)
+        info_of_contours.sort(key=lambda cnt: cnt[0]+cnt[2])
+        end_x = info_of_contours[-1][0]+info_of_contours[-1][2]  # last contour OX + last contour width
+        return img[
+            0:h,
+            start_x:end_x
+        ]
+
     def data_incorrect_parsed_log(self, stringed_error, data_key):
         print(stringed_error)
         self.job_log(stringed_error)
@@ -1235,6 +1252,8 @@ class ParserChecks:
                         digit1_img = cv2.resize(digit1_img, (digit1_w + added_width, digit1_h))
                         digit2_h, digit2_w = digit2_img.shape[:2]
                         digit2_img = cv2.resize(digit2_img, (digit2_w + added_width, digit2_h))
+                        digit1_img = self.remove_digit_white_space(digit1_img)
+                        digit2_img = self.remove_digit_white_space(digit2_img)
 
                         self.save_pic_debug(digit1_img, f"table/digit1({j}, {index}).jpg")
                         self.save_pic_debug(digit2_img, f"table/digit2({j}, {index}).jpg")
@@ -1922,6 +1941,12 @@ class ParserChecks:
             self.all_data_not_found = True
         return self.check_info, self.all_data_not_found, self.is_incorrect_check_info, self.StepLogFull
 
+
+# FIXME:
+# chance cards close contours
+# Qr code fining
+# Rotate image
+# Find 777 numbers
 
 # TODO: refactor wrote code
 # TODO: add logging to all wrote code
