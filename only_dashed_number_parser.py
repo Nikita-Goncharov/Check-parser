@@ -1,18 +1,272 @@
-# import os
-#
+"""
+@step_decorator("get_coords_of_main_lines")
+    def get_coords_of_main_lines(self):
+        try:
+            blured_img_lines = cv2.GaussianBlur(self.wb_blured_img, [5, 5], 0)  # self.img_grayscale
+            img = cv2.threshold(blured_img_lines, 180, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+            self.save_pic_debug(img, f"wb_inverted/wb_inverted.jpg")
+
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 2))
+            horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
+            img_dilation = cv2.dilate(img, kernel, iterations=2)
+            detect_horizontal = cv2.morphologyEx(img_dilation, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
+            self.save_pic_debug(detect_horizontal, f"detect_lines/detect_lines.jpg")
+
+            contours_points = cv2.findContours(detect_horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # TODO: refactor unnesting and other
+
+            # One of elements it is data what we do not really need
+            # contours_points - list of numpy arrays with elements: [[[x, y]], [[x, y]], [[x, y]]]
+            contours_points = contours_points[0] if len(contours_points) == 2 else contours_points[1]
+            contours_points = list(contours_points)
+
+            # Filter None values
+            sorted_contours_points = filter(lambda line_array: line_array is not None, contours_points)
+
+            # Numpy array to python list
+            lines_x_y_points = list(map(lambda line_array: line_array.tolist(), sorted_contours_points))
+
+            # Removing unwanted nesting
+            # From [[[x, y]], [[x, y]], [[x, y]]] to [[x, y], [x, y], [x, y]]  (One element it is points for one line)
+            unnested_lines_points = list(
+                map(lambda list_of_x_y_pairs: list(
+                    map(lambda x_y_pair: x_y_pair[0], list_of_x_y_pairs)
+                ), lines_x_y_points)
+            )
+
+            # Now we have lists with points of lines, but needed lines can be splited
+            # So we should merge lines with +- same OY
+            # unnested_lines_points already sorted from bigger to smaller
+            result_lines_points = []
+            for index, line_points in enumerate(unnested_lines_points):
+                if index == 0:
+                    result_lines_points.append(line_points)
+                else:
+                    last_line = result_lines_points[-1]
+                    last_point_y = last_line[-1][1]
+                    if last_point_y - line_points[-1][1] <= 17:
+                        result_lines_points.pop()
+                        result_lines_points.append([*last_line, *line_points])
+                    else:
+                        result_lines_points.append(line_points)
+
+            # We need only two(three or four) lines around cards/table
+            # So this two lines have the most points count(width)
+            line_threshold = self.img_width - 100  # if line width >= threshold then we take this line
+            lines = []
+
+            for line_points in result_lines_points:
+                min_x, max_x, sum_y = line_points[0][0], 0, 0
+                for x, y in line_points:
+                    sum_y += y
+                    if min_x > x:
+                        min_x = x
+                    if max_x < x:
+                        max_x = x
+                y = sum_y // len(line_points)
+
+                # print("MAIN LINES BEFORE WIDTH AND POSITION CHECK:", {"min_x": min_x, "max_x": max_x, "y": y})
+                # Remove lines which OY coord in range from 0 to 1200 and from img.height to img.height-500
+                # Because card/table lines not in those diapason
+                # and if x2 - x1 >= threshold
+                condition = max_x - min_x >= line_threshold and y not in range(0, 1200) and y not in range(
+                    self.img_height - 500, self.img_height)
+                if condition:
+                    lines.append({"min_x": min_x, "max_x": max_x, "y": y})
+
+            if len(lines) == 0:
+                self.data_incorrect_parsed_log("Main content lines were not found", "main_content_lines")
+                raise Exception()
+            elif len(lines) == 1:
+                self.data_incorrect_parsed_log("Not all main content lines were found", "main_content_lines")
+                raise Exception()
+            else:
+                # Here in lines can be more than four lines now
+                # But the four needed ones are the longest
+                lines = sorted(lines, key=lambda line: line["max_x"] - line["min_x"], reverse=True)
+                lines = lines[:4]
+                lines.sort(key=lambda line_data: line_data["y"])
+                if len(lines) == 2:  # 123, 777, chance
+                    self.longest_lines = {
+                        "top_border_line": {},
+                        "top_line": lines[0],
+                        "middle_line": {},
+                        "bottom_line": lines[1]
+                    }
+                elif len(lines) == 3:  # For lotto, if three main lines
+                    self.longest_lines = {
+                        "top_border_line": {},
+                        "top_line": lines[0],
+                        "middle_line": lines[1],
+                        "bottom_line": lines[2]
+                    }
+                else:  # For lotto, if four main lines
+                    self.longest_lines = {
+                        "top_border_line": lines[0],
+                        "top_line": lines[1],
+                        "middle_line": lines[2],
+                        "bottom_line": lines[3]
+                    }
+        except:
+            self.all_data_not_found = True
+            self.data_incorrect_parsed_log("Main content lines were not found, error occurred", "main_content_lines")
+            self.StepStatus = "FAIL"
+        return self.longest_lines
+"""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import os
+
 import cv2
 import numpy as np
-# from colorama import init, Fore, Back
-from pyzbar import pyzbar
-
 
 # TODO: lotto do max width check and square check too
 
-img = cv2.imread("/home/nikita-goncharov/Desktop/Failed_checks/12131.jpeg")
-red_channel = img[:, :, 2]
-mask = red_channel > 120
-img[mask] = [255, 255, 255]
-print(pyzbar.decode(img, symbols=[pyzbar.ZBarSymbol.QRCODE]))
+def crop_img(img):
+    """Extracting vertical lines through morphology operations
+
+    """
+    h, w = img.shape[:2]
+    hsv = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2HSV)
+    h_min = np.array((0, 0, 0), np.uint8)
+    h_max = np.array((255, 255, 213), np.uint8)
+    thresh = cv2.inRange(hsv, h_min, h_max)
+
+    wb_img = cv2.threshold(thresh, 127, 255, cv2.THRESH_BINARY_INV)[1]
+
+    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 45))
+    wb_img = cv2.dilate(wb_img, v_kernel)
+
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 31))
+    wb_img = cv2.morphologyEx(wb_img, cv2.MORPH_OPEN, k)
+
+    contours = cv2.findContours(cv2.threshold(wb_img, 127, 255, cv2.THRESH_BINARY_INV)[1], cv2.RETR_LIST,
+                                cv2.CHAIN_APPROX_SIMPLE)[0]
+    contours = [cv2.boundingRect(cnt) for cnt in contours]
+    contours = [cnt for cnt in contours if cnt[3] >= (h // 3) * 2]
+    contours.sort(key=lambda cnt: cnt[3])  # sort by height
+    side_lines = contours[-2:]
+    print("CHECK CROP SIDE LINES", side_lines)
+    side_lines.sort(key=lambda cnt: cnt[0])
+    if len(side_lines) == 2:
+        l_line = side_lines[0]
+        r_line = side_lines[1]
+        resulted_img = img[
+                       0:h,
+                       l_line[0] + l_line[2]:r_line[0]
+                       ]
+    elif len(side_lines) == 1:  # one line
+        if side_lines[0][0] < w // 2:  # if line OX in first half of image then it is left line else right
+            l_line = side_lines[0]
+            resulted_img = img[
+                           0:h,
+                           l_line[0] + l_line[2]:w
+                           ]
+        else:
+            r_line = side_lines[0]
+            resulted_img = img[
+                           0:h,
+                           0:r_line[0]
+                           ]
+    else:
+        resulted_img = img
+    return resulted_img
+
+def get_angle(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.bitwise_not(gray)
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+
+    coords = np.column_stack(np.where(thresh > 0))
+    angle = cv2.minAreaRect(coords)[-1]
+    # print("CHECK ANGLE", angle)
+    if angle < 30:
+        angle = -angle
+    else:
+        angle = 90 - angle
+    print("CHECK ANGLE", angle)
+    return angle
+
+
+if __name__ == "__main__":
+    # Code for testing
+    checks_count = 0
+    check_folder = "/home/nikita-goncharov/Desktop/Checks"
+    checks_list = os.listdir(check_folder)
+    for file in checks_list:
+        item_path = os.path.join(check_folder, file)
+        if os.path.isfile(item_path):
+            checks_count += 1
+            print("**********************************************")
+            print(f"{str(checks_count).zfill(2)} = Current check: {item_path}")
+            img = cv2.imread(item_path)
+
+            red_channel = img[:, :, 2]  # Red channel index is 2
+            mask = red_channel > 230
+            img[mask] = [255, 255, 255]
+
+            bordered_img = img
+            # bordered_img = cv2.copyMakeBorder(
+            #     img,
+            #     top=15,
+            #     bottom=15,
+            #     left=15,
+            #     right=15,
+            #     value=[179, 171, 182],
+            #     borderType=cv2.BORDER_CONSTANT
+            # )
+            # cv2.imshow('', img)
+            # cv2.waitKey(0)
+            angle = get_angle(bordered_img)
+            h, w = img.shape[:2]
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC,
+                                     borderMode=cv2.BORDER_REPLICATE)
+
+            cv2.imwrite(f"/home/nikita-goncharov/Desktop/Checks/Rotated/{file}", rotated)
+            cropped = crop_img(rotated)
+            cv2.imwrite(f"/home/nikita-goncharov/Desktop/Checks/Cropped/{file}", cropped)
+
+            print("**********************************************")
+    print(f"Count of checks: {checks_count}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #
 # init(autoreset=True)

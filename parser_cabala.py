@@ -206,6 +206,7 @@ class ParserChecks:
             "spaced_number": "",
             "extra": False,
             "extra_number": "",
+            "is_table_pattern": False,
             "cards": {
                 "hearts": [],
                 "diamonds": [],
@@ -400,7 +401,6 @@ class ParserChecks:
                 wb_image = cv2.threshold(image, 200, 255, cv2.THRESH_BINARY)[1]
                 blured_img_main = cv2.bilateralFilter(wb_image, 1, 75, 75)
                 self.wb_blured_img = cv2.threshold(blured_img_main, 170, 255, cv2.THRESH_TOZERO)[1]
-
                 self.save_pic_debug(self.wb_blured_img, f"img_wb_blured_03.jpg")
 
                 print("FINISH img_prep")
@@ -440,6 +440,7 @@ class ParserChecks:
         contours = [cnt for cnt in contours if cnt[3] >= (h//3)*2]
         contours.sort(key=lambda cnt: cnt[3])  # sort by height
         side_lines = contours[-2:]
+        print("CHECK CROP SIDE LINES", side_lines)
         side_lines.sort(key=lambda cnt: cnt[0])
         if len(side_lines) == 2:
             l_line = side_lines[0]
@@ -448,7 +449,7 @@ class ParserChecks:
                 0:h,
                 l_line[0] + l_line[2]:r_line[0]
             ]
-        else:  # one line
+        elif len(side_lines) == 1:  # one line
             if side_lines[0][0] < w//2:  # if line OX in first half of image then it is left line else right
                 l_line = side_lines[0]
                 resulted_img = img[
@@ -461,13 +462,25 @@ class ParserChecks:
                     0:h,
                     0:r_line[0]
                 ]
+        else:
+            resulted_img = img
         return resulted_img
 
     def rotate_and_crop_check(self):
-        # TODO: refactor
         red_channel = self.img_original[:, :, 2]  # Red channel index is 2
         mask = red_channel > 230
         self.img_original[mask] = [255, 255, 255]
+
+        # bordered_img = cv2.copyMakeBorder(
+        #     self.img_original,
+        #     top=15,
+        #     bottom=15,
+        #     left=15,
+        #     right=15,
+        #     value=[179, 171, 182],
+        #     borderType=cv2.BORDER_CONSTANT
+        # )
+
         gray = cv2.cvtColor(self.img_original, cv2.COLOR_BGR2GRAY)
         gray = cv2.bitwise_not(gray)
         thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
@@ -478,7 +491,6 @@ class ParserChecks:
             angle = -angle
         else:
             angle = 90 - angle
-
         print("CHECK ANGLE", angle)
 
         h, w = self.img_height, self.img_width
@@ -531,6 +543,19 @@ class ParserChecks:
             if len(line) == 1:
                 result_lines_points.append(line[0])
             else:
+                # resulted_line = []
+                # for j, segment in enumerate(line):
+                #     if j == 0:
+                #         resulted_line = segment
+                #     else:
+                #         if segment[0] - (resulted_line[0]+resulted_line[2]) < 70:
+                #             x = resulted_line[0]
+                #             y = resulted_line[1]
+                #             width = segment[0]+segment[2] - resulted_line[0]
+                #             height = resulted_line[3]
+                #             resulted_line = (x, y, width, height)
+                # result_lines_points.append(resulted_line)
+
                 first_point = line[0]
                 last_point = line[-1]
                 line_width = last_point[0] - first_point[0] + last_point[2]
@@ -613,8 +638,11 @@ class ParserChecks:
 
         contours = cv2.findContours(inverted_line, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
         contours = [cv2.boundingRect(cnt) for cnt in contours]
-        # sort by width, if there are few lines(image cropped with main lines), then needed line will smallest
         contours = self.merge_lines_contours(contours)
+        print("Lotto table lines: ", contours)
+        # Remove lines with small OY = [0, 30] or with big OY = [height-30, height]
+        contours = list(filter(lambda cnt: cnt[1] not in range(0, 30) and cnt[1] not in range(height-30, height+1), contours))
+        # sort by width, if there are few lines(image cropped with main lines), then needed line will smallest
         contours.sort(key=lambda cnt: cnt[2])
         h_line = contours[0]
 
@@ -659,7 +687,7 @@ class ParserChecks:
         contours = cv2.findContours(cv2.threshold(img, 127, 255, cv2.THRESH_BINARY_INV)[1], cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
         info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
         info_of_contours.sort(key=lambda cnt: cnt[0])  # by OX
-        print("DIGIT contours", info_of_contours)
+        # print("DIGIT contours", info_of_contours)
         start_x = info_of_contours[0][0]  # first contour OX
 
         # Here we should take as end OX contour with the biggest sum(OX and width)
@@ -669,6 +697,61 @@ class ParserChecks:
             0:h,
             start_x:end_x
         ]
+
+    @staticmethod
+    def get_unreaded_number_position(contours_lines):
+        # TODO: do for strong and systematic too
+        incomplete_lines = list(filter(lambda line: len(line) < 6, contours_lines))
+        ideal_line = list(filter(lambda line: len(line) == 6, contours_lines))[0]
+
+        if len(incomplete_lines) == 0:
+            return -1
+        else:
+            line = incomplete_lines[0]
+            if len(line) == 5:
+                prev_number_contour = 0
+                for i, number_contour in enumerate(line):
+                    if i == 0:
+                        prev_number_contour = number_contour
+                    else:
+                        print(prev_number_contour)
+                        print(number_contour)
+                        print(number_contour[0] - (prev_number_contour[0]+prev_number_contour[2]))
+                        if number_contour[0] - (prev_number_contour[0]+prev_number_contour[2]) > 50:
+                            return i+1  # because i starts from 0
+                        prev_number_contour = number_contour
+                # First or last(6) element
+                # take incomplete line first number
+                # and then compare it x1 with x2 of ideal line first number, if abs more than 10,
+                # then first number contour was not found else it was last
+                incomplete_line_first_contour = line[0]
+                ideal_line_first_contour = ideal_line[0]
+                if abs(incomplete_line_first_contour[0] - ideal_line_first_contour[0]) > 10:
+                    return 1
+                else:
+                    return 6
+
+            else:
+                return -1  # TODO: Если неотпечатаных линий несколько, что делать тогда ??
+
+    @staticmethod
+    def add_missed_table_number_like_pattern(contours_lines, position):
+        for i, line in enumerate(contours_lines):
+            if len(line) == 5:
+                if position == 1:
+                    contours_lines[i] = ["*", line]
+                elif position == 6:
+                    contours_lines[i] = [line, "*"]
+                else:
+                    contours_lines[i] = [*line[0:position-1], "*", *line[position-1:]]
+            elif len(line) == 6:
+                if position == 1:
+                    contours_lines[i] = ["*", line[1:]]
+                elif position == 6:
+                    contours_lines[i] = [line[:-1], "*"]
+                else:
+                    contours_lines[i] = [*line[0:position-1], "*", *line[position:]]
+        return contours_lines
 
     def data_incorrect_parsed_log(self, stringed_error, data_key):
         print(stringed_error)
@@ -688,68 +771,28 @@ class ParserChecks:
             detect_horizontal = cv2.morphologyEx(img_dilation, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
             self.save_pic_debug(detect_horizontal, f"detect_lines/detect_lines.jpg")
 
-            contours_points = cv2.findContours(detect_horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # TODO: refactor unnesting and other
+            contours = cv2.findContours(detect_horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+            contours = [cv2.boundingRect(cnt) for cnt in contours]
+            lines_contours = self.merge_lines_contours(contours)
+            print(lines_contours)
 
-            # One of elements it is data what we do not really need
-            # contours_points - list of numpy arrays with elements: [[[x, y]], [[x, y]], [[x, y]]]
-            contours_points = contours_points[0] if len(contours_points) == 2 else contours_points[1]
-            contours_points = list(contours_points)
-
-            # Filter None values
-            sorted_contours_points = filter(lambda line_array: line_array is not None, contours_points)
-
-            # Numpy array to python list
-            lines_x_y_points = list(map(lambda line_array: line_array.tolist(), sorted_contours_points))
-
-            # Removing unwanted nesting
-            # From [[[x, y]], [[x, y]], [[x, y]]] to [[x, y], [x, y], [x, y]]  (One element it is points for one line)
-            unnested_lines_points = list(
-                map(lambda list_of_x_y_pairs: list(
-                    map(lambda x_y_pair: x_y_pair[0], list_of_x_y_pairs)
-                ), lines_x_y_points)
-            )
-
-            # Now we have lists with points of lines, but needed lines can be splited
-            # So we should merge lines with +- same OY
-            # unnested_lines_points already sorted from bigger to smaller
-            result_lines_points = []
-            for index, line_points in enumerate(unnested_lines_points):
-                if index == 0:
-                    result_lines_points.append(line_points)
-                else:
-                    last_line = result_lines_points[-1]
-                    last_point_y = last_line[-1][1]
-                    if last_point_y - line_points[-1][1] <= 17:
-                        result_lines_points.pop()
-                        result_lines_points.append([*last_line, *line_points])
-                    else:
-                        result_lines_points.append(line_points)
-
-            # We need only two lines around cards/table
+            # We need only two(three or four) lines around cards/table
             # So this two lines have the most points count(width)
             line_threshold = self.img_width - 100  # if line width >= threshold then we take this line
             lines = []
 
-            for line_points in result_lines_points:
-                min_x, max_x, sum_y = line_points[0][0], 0, 0
-                for x, y in line_points:
-                    sum_y += y
-                    if min_x > x:
-                        min_x = x
-                    if max_x < x:
-                        max_x = x
-                y = sum_y // len(line_points)
-
-                # print("MAIN LINES BEFORE WIDTH AND POSITION CHECK:", {"min_x": min_x, "max_x": max_x, "y": y})
-                # Remove lines which OY coord in range from 0 to 1200 and from img.height to img.height-500
-                # Because card/table lines not in those diapason
-                # and if x2 - x1 >= threshold
+            # Remove lines which OY coord in range from 0 to 1200 and from img.height to img.height-500
+            # Because card/table lines not in those diapason
+            # and if x2 - x1 >= threshold
+            for line in lines_contours:
+                min_x = line[0]
+                max_x = line[0]+line[2]
+                y = line[1]
                 condition = max_x - min_x >= line_threshold and y not in range(0, 1200) and y not in range(
                     self.img_height - 500, self.img_height)
                 if condition:
                     lines.append({"min_x": min_x, "max_x": max_x, "y": y})
-
+            print("MAIN LINES OF CHECK:", lines)
             if len(lines) == 0:
                 self.data_incorrect_parsed_log("Main content lines were not found", "main_content_lines")
                 raise Exception()
@@ -891,6 +934,7 @@ class ParserChecks:
                 self.qr_code_info["bottom_left"][1] + 310:self.qr_code_info["bottom_left"][1] + 310 + 300,
                 self.qr_code_info["top_left"][0] - 158:self.qr_code_info["top_right"][0] + 158
             ]
+            self.save_pic_debug(game_type_img, f"game_type/game_type_zone.jpg")
             edges = cv2.Canny(game_type_img, 10, 200)
             contours, hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             # Contours to list of tuples
@@ -949,8 +993,8 @@ class ParserChecks:
             self.check_info["game_subtype"] = parsed_subtype
             if parsed_subtype == "":
                 self.data_incorrect_parsed_log("Game subtype was not found(get_game_subtype)", "game_subtype")
-        except:
-            self.data_incorrect_parsed_log("Game subtype was not found, error occurred(get_game_subtype)", "game_subtype")
+        except Exception as ex:
+            self.data_incorrect_parsed_log(f"Game subtype was not found, error occurred(get_game_subtype): {str(ex)}", "game_subtype")
             self.StepStatus = "FAIL"
         return self.check_info["game_subtype"]
 
@@ -1034,19 +1078,26 @@ class ParserChecks:
                 top_line["y"]:bottom_line["y"],
                 0:self.img_width
             ]
-            # cards_img = cv2.threshold(cards_img, 200, 255, cv2.THRESH_BINARY)[1]
-            # cards_img = cv2.GaussianBlur(cards_img, (3, 3), 0)
-            self.save_pic_debug(cards_img, f"cards/cards.jpg")
 
-            edges = cv2.Canny(cards_img, 10, 200)
-            contours, hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            self.save_pic_debug(cards_img, f"cards/cards.jpg")
+            # edges = cv2.Canny(cards_img, 10, 200)
+            # contours, hierarchy = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 1))
+            k = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 1))
+            closing = cv2.morphologyEx(cards_img, cv2.MORPH_OPEN, k)
+            self.save_pic_debug(closing, f"cards/closing_cards.jpg")
+            img_dilated = cv2.dilate(cv2.threshold(closing, 127, 255, cv2.THRESH_BINARY_INV)[1], kernel)
+            self.save_pic_debug(img_dilated, f"cards/dilated_cards.jpg")
+
+            contours = cv2.findContours(img_dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
             # Contours to list of tuples
             info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
             # Sort contours in right way
             sorted_contours = sorted(info_of_contours, key=lambda contour: contour[0])
             # Remove garbage contours
             sorted_contours = [contour for contour in sorted_contours if
-                               contour[2] >= 30 and contour[3] >= 70]
+                               contour[2] >= 100 and contour[2] <= 200 and contour[3] >= 150 and contour[3] <= 230]
 
             # For four card suits(spades, hearts, ...)
             unique_contours = []
@@ -1115,22 +1166,23 @@ class ParserChecks:
 
             self.save_pic_debug(crop_img, f"table/table.jpg")
             crop_img_original = crop_img.copy()
-            crop_img_inv = cv2.threshold(crop_img, 200, 255, cv2.THRESH_BINARY_INV)[1]
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 9))
-            dilated_img = cv2.dilate(crop_img_inv, kernel)
-            self.save_pic_debug(dilated_img, f"table/dilated_table.jpg")
-
-            contours = cv2.findContours(dilated_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
-            info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
-
-            # Remove garbage contours
-            min_width = 40
-            max_width = 55
-            min_height = 40
-
-            sorted_contours = [contour for contour in info_of_contours if contour[2] >= min_width and contour[2] <= max_width and contour[3] >= min_height]
 
             if game_type == "123":
+                crop_img_inv = cv2.threshold(crop_img, 200, 255, cv2.THRESH_BINARY_INV)[1]
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 9))
+                dilated_img = cv2.dilate(crop_img_inv, kernel)
+                self.save_pic_debug(dilated_img, f"table/dilated_table.jpg")
+
+                contours = cv2.findContours(dilated_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[0]
+                info_of_contours = [cv2.boundingRect(contour) for contour in contours]  # (x, y, w, h)
+
+                # Remove garbage contours
+                min_width = 40
+                max_width = 60
+                min_height = 40
+
+                sorted_contours = [contour for contour in info_of_contours if
+                                   contour[2] >= min_width and contour[2] <= max_width and contour[3] >= min_height]
                 print(info_of_contours, len(info_of_contours))
                 print(sorted_contours, len(sorted_contours))
                 if len(sorted_contours) % 3 != 0:
@@ -1157,13 +1209,12 @@ class ParserChecks:
                             number[1]:number[1] + number[3],
                             number[0]:number[0] + number[2]
                         ]
+                        crop_number = self.remove_digit_white_space(crop_number)
                         self.save_pic_debug(crop_number, f"table/cropped_number{j}, {index}.jpg")
-
                         table_number = self.get_value_from_image(crop_number, "table")
                         self.check_info["table"][f"line_{index + 1}"]["regular"].append(int(table_number))
 
             elif game_type == "777":
-                # TODO: refactor
                 kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 1))
                 k = cv2.getStructuringElement(cv2.MORPH_RECT, (19, 1))
                 closing = cv2.morphologyEx(crop_img, cv2.MORPH_OPEN, k)
@@ -1181,7 +1232,7 @@ class ParserChecks:
                     "777_col8": 8,
                     "777_col9": 9
                 }
-                if game_subtype == "777_regular":  # TODO: REFACTOR!!!!
+                if game_subtype == "777_regular":
                     min_width = 60
                     max_width = 75
                     min_height = 35
@@ -1202,24 +1253,7 @@ class ParserChecks:
                 print(info_of_contours, len(info_of_contours))
                 print(sorted_contours, len(sorted_contours))
 
-                current_line = 0
-                numbers_in_lines = []
-                prev_number_OY = 0
-                # TODO: rewrite with using  self._order_contours_in_lines
-                sorted_by_OY = sorted(sorted_contours, key=lambda contour: contour[1])
-                numbers_in_lines.append([])
-
-                for number in sorted_by_OY:
-                    if prev_number_OY == 0:
-                        prev_number_OY = number[1]
-
-                    if number[1] - prev_number_OY > 10:
-                        current_line += 1
-                        numbers_in_lines.append([])
-
-                    numbers_in_lines[current_line].append(number)
-
-                    prev_number_OY = number[1]
+                numbers_in_lines = self._order_contours_in_lines(sorted_contours)
 
                 for index, line in enumerate(numbers_in_lines):
                     line.sort(key=lambda number: number[0])
@@ -1247,11 +1281,20 @@ class ParserChecks:
                             y:y + h,
                             x+OX_between_digits:x+w
                         ]
-                        added_width = 2 if game_subtype == "777_col8" else 5
-                        digit1_h, digit1_w = digit1_img.shape[:2]
-                        digit1_img = cv2.resize(digit1_img, (digit1_w + added_width, digit1_h))
-                        digit2_h, digit2_w = digit2_img.shape[:2]
-                        digit2_img = cv2.resize(digit2_img, (digit2_w + added_width, digit2_h))
+                        if game_subtype == "777_col8":
+                            digit1_h, digit1_w = digit1_img.shape[:2]
+                            digit1_img = cv2.resize(digit1_img, (digit1_w + 2, digit1_h))
+                            digit2_h, digit2_w = digit2_img.shape[:2]
+                            digit2_img = cv2.resize(digit2_img, (digit2_w + 2, digit2_h))
+                        elif game_subtype == "777_col9":
+                            digit1_h, digit1_w = digit1_img.shape[:2]
+                            digit1_img = cv2.resize(digit1_img, (digit1_w + 5, digit1_h))
+                            digit2_h, digit2_w = digit2_img.shape[:2]
+                            digit2_img = cv2.resize(digit2_img, (digit2_w + 5, digit2_h))
+
+                        digit1_img = cv2.threshold(digit1_img, 127, 255, cv2.THRESH_BINARY)[1]
+                        digit2_img = cv2.threshold(digit2_img, 127, 255, cv2.THRESH_BINARY)[1]
+
                         digit1_img = self.remove_digit_white_space(digit1_img)
                         digit2_img = self.remove_digit_white_space(digit2_img)
 
@@ -1346,7 +1389,17 @@ class ParserChecks:
 
             if self.check_info["game_subtype"] == "lotto_regular":
                 regular_lines = self._order_contours_in_lines(regular_number_contours)
+                for i, line in enumerate(regular_lines):
+                    line.sort(key=lambda cnt: cnt[0])
+                    regular_lines[i] = line
                 strong_lines = self._order_contours_in_lines(strong_number_contours)
+
+                position = self.get_unreaded_number_position(regular_lines)
+                print("POSITION OF NOT FOUND TABLE NUMBER IS:", position)
+                if position != -1:
+                    self.check_info["is_table_pattern"] = True
+                    regular_lines = self.add_missed_table_number_like_pattern(regular_lines, position)
+
                 for i, line in enumerate(regular_lines):
                     self.check_info["table"][f"line_{i+1}"] = {
                         "regular": [],
@@ -1354,6 +1407,9 @@ class ParserChecks:
                     }
                     # Find regular numbers
                     for j, number in enumerate(line):
+                        if number == "*":
+                            self.check_info["table"][f"line_{i + 1}"]["regular"].append("*")
+                            continue
                         x, y, w, h = number
                         digit1_img = regular_img[
                             y:y + h,
@@ -1368,7 +1424,7 @@ class ParserChecks:
                         digit1 = self.get_value_from_image(digit1_img, "table")
                         digit2 = self.get_value_from_image(digit2_img, "table")
                         self.check_info["table"][f"line_{i + 1}"]["regular"].append(int(f"{digit1}{digit2}"))
-                    self.check_info["table"][f"line_{i + 1}"]["regular"].sort(key=lambda number: number)
+                    self.check_info["table"][f"line_{i + 1}"]["regular"] = self.check_info["table"][f"line_{i + 1}"]["regular"][::-1]
 
                     # Find strong number, for regular exists only one strong number for line
                     strong_line = strong_lines[i]
@@ -1533,6 +1589,13 @@ class ParserChecks:
             self.StepStatus = "FAIL"
         return self.check_info["date"]
 
+    @step_decorator("get_user_passport")
+    def get_user_passport(self):
+        # TODO: взять сегмент с начала чека и до верха Qr кода.
+        #  Размыть по горизонтали(dilate) вытянуть блок нужного размера.
+        #  И потом как-то вытянуть с блока числа поделеные на подблоки, найти их
+        pass
+
     @step_decorator("get_game_id")
     def get_game_id(self):
         try:
@@ -1655,22 +1718,29 @@ class ParserChecks:
                     y:y+50,
                     x-180:x+101+70
                 ]
+                self.save_pic_debug(cropped_subtype, "subtype/subtype_cropped.png")
 
                 img_subtype_multi = cv2.imread(os.path.join(self.template_images_dir, "chance_multi_subtype.png"))
                 img_subtype_multi = cv2.cvtColor(img_subtype_multi, cv2.COLOR_BGR2GRAY)
+
+                img_subtype_multi_not_full = cv2.imread(os.path.join(self.template_images_dir, "chance_multi_subtype_not_full.png"))
+                img_subtype_multi_not_full = cv2.cvtColor(img_subtype_multi_not_full, cv2.COLOR_BGR2GRAY)
 
                 img_subtype_systematic = cv2.imread(os.path.join(self.template_images_dir, "chance_systematic_subtype.png"))
                 img_subtype_systematic = cv2.cvtColor(img_subtype_systematic, cv2.COLOR_BGR2GRAY)
 
                 res_suffix_subtype = cv2.matchTemplate(cropped_subtype, img_subtype_multi, cv2.TM_CCOEFF_NORMED)
-                loc_suffix = np.where(res_suffix_subtype >= 0.7)  # THRESHOLD
+                loc_suffix = np.where(res_suffix_subtype >= 0.65)  # THRESHOLD
+
+                res_suffix_subtype_not_full = cv2.matchTemplate(cropped_subtype, img_subtype_multi_not_full, cv2.TM_CCOEFF_NORMED)
+                loc_suffix_not_full = np.where(res_suffix_subtype_not_full >= 0.65)  # THRESHOLD
 
                 res_prefix_subtype = cv2.matchTemplate(cropped_subtype, img_subtype_systematic, cv2.TM_CCOEFF_NORMED)
-                loc_prefix = np.where(res_prefix_subtype >= 0.7)  # THRESHOLD
+                loc_prefix = np.where(res_prefix_subtype >= 0.65)  # THRESHOLD
 
                 if len(loc_prefix[0].tolist()) != 0:  # systematic first because here can be systematic type_5
                     result = "chance_systematic"
-                elif len(loc_suffix[0].tolist()) != 0:
+                elif len(loc_suffix[0].tolist()) != 0 or len(loc_suffix_not_full[0].tolist()) != 0:
                     result = "chance_multi"
                 else:
                     result = "chance_regular"
@@ -1943,12 +2013,13 @@ class ParserChecks:
 
 
 # FIXME:
-# chance cards close contours
-# Qr code fining
-# Rotate image
-# Find 777 numbers
+# chance 12_003 game_type -- qr code not found in second time
 
-# TODO: refactor wrote code
+
+# 123 table number contours test
+# check lotto table pattern
+
+# TODO: Find user passport code before qr code
+
 # TODO: add logging to all wrote code
-
 # TODO: find "autofilling" data near subtype
