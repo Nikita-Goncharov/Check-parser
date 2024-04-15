@@ -128,7 +128,7 @@ class ParserChecks:
         # start log
         self.set_log()
         self.job_log("" + "*" * 40)
-        self.job_log(f'***** START job {img_path} ******')
+        self.job_log(f'***** START {img_path} ******')
 
     def set_log(self):
         log_file = os.path.join(self.log_dir, f'parser_cabala.log')
@@ -732,7 +732,7 @@ class ParserChecks:
                     return 6
 
             else:
-                return -1  # TODO: Если неотпечатаных линий несколько, что делать тогда ??
+                return -1
 
     @staticmethod
     def add_missed_table_number_like_pattern(contours_lines, position):
@@ -1591,9 +1591,7 @@ class ParserChecks:
 
     @step_decorator("get_user_passport")
     def get_user_passport(self):
-        # TODO: взять сегмент с начала чека и до верха Qr кода.
-        #  Размыть по горизонтали(dilate) вытянуть блок нужного размера.
-        #  И потом как-то вытянуть с блока числа поделеные на подблоки, найти их
+        # TODO: Find user passport code before qr code
         pass
 
     @step_decorator("get_game_id")
@@ -2012,14 +2010,4 @@ class ParserChecks:
         return self.check_info, self.all_data_not_found, self.is_incorrect_check_info, self.StepLogFull
 
 
-# FIXME:
-# chance 12_003 game_type -- qr code not found in second time
-
-
-# 123 table number contours test
-# check lotto table pattern
-
-# TODO: Find user passport code before qr code
-
-# TODO: add logging to all wrote code
 # TODO: find "autofilling" data near subtype

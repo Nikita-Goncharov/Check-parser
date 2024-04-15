@@ -6,7 +6,7 @@ from parser_cabala import ParserChecks
 if __name__ == "__main__":
     # Code for testing
     checks_count = 0
-    check_folder = "/home/nikita-goncharov/Desktop/Failed_checks"  # "/home/nikita-goncharov/Desktop/Failed_checks"  # checks directory
+    check_folder = "chance"
     checks_list = os.listdir(check_folder)
 
     item_log_dir = os.path.join("..", "log")
@@ -16,8 +16,6 @@ if __name__ == "__main__":
         item_path = os.path.join(check_folder, file)
         if os.path.isfile(item_path):
             checks_count += 1
-            if checks_count > 5000:
-                break
             print("**********************************************")
             print(f"{str(checks_count).zfill(2)} = Current check: {item_path}")
             item_file = ParserChecks(item_path, item_log_dir, item_debug_img_dir)
